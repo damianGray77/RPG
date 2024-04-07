@@ -4,7 +4,7 @@
 
 #include "Buffer.h"
 #include "Win32.h"
-#include "FPS.h"
+#include "Time.h"
 #include "Game.h"
 
 void init();

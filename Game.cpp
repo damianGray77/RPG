@@ -7,12 +7,21 @@ Game::Game() {
 
 	max_tiles_x = 0;
 	max_tiles_y = 0;
+	mid_tiles_x = 0;
+	mid_tiles_y = 0;
+
 	dirty_len   = 0;
+
+	maph = 0;
+	mapw = 0;
+	max_px_x = 0;
+	max_px_y = 0;
 
 	running  = false;
 	paused   = false;
 	refresh  = false;
 
+	map       = NULL;
 	tiles     = NULL;
 	tindices  = NULL;
 
@@ -27,10 +36,9 @@ bool Game::init() {
 	running = true;
 	paused  = false;
 
-	map      = new ulong[65535];
-
-	tiles    = new ulong[65535];
-	tindices = new ulong*[256];
+	map      = new uint32[65535];
+	tiles    = new uint32[65535];
+	tindices = new uint32*[256];
 
 	state  = { 10, 7 };
 	interp = {  0, 0 };
@@ -283,6 +291,8 @@ void Game::copy_to_buffer_clip_masked(const int oindex, const int ow, const int 
 void Game::update(const float delta) {
 	int unit = (int)(delta * 5.0f);
 
+	update_input(unit);
+
 	static int i = 0; i = (i + 1) % 4;
 	map[0] =
 		  (ulong)(0 << 31)
@@ -290,11 +300,9 @@ void Game::update(const float delta) {
 		+ (ulong)(i <<  0)
 	;
 	flag_dirt(0, 0);
-
-	update_input(unit);
 }
 
-bool Game::is_pressed(const ubyte scancode, const bool turnoff) {
+bool Game::is_pressed(const uint8 scancode, const bool turnoff) {
 	if (!key_press[scancode]) { return false; }
 
 	if (turnoff) { key_press[scancode] = false; }
@@ -304,18 +312,18 @@ bool Game::is_pressed(const ubyte scancode, const bool turnoff) {
 
 void Game::update_input(const int unit) {
 	if(!paused) {
-		bool kup    = key_press[K_UP]    && state.y > 0;
-		bool kdown  = key_press[K_DOWN]  && state.y < (int)maph;
-		bool kleft  = key_press[K_LEFT]  && state.x > 0;
-		bool kright = key_press[K_RIGHT] && state.x < (int)mapw;
+		bool kup    = key_press[K_UP]    && (state.y > 0    ||  0 != interp.y);
+		bool kleft  = key_press[K_LEFT]  && (state.x > 0    ||  0 != interp.x);
+		bool kdown  = key_press[K_DOWN]  && (state.y < maph || 31 != interp.y);
+		bool kright = key_press[K_RIGHT] && (state.x < mapw || 31 != interp.x);
 
 		if (kup || kdown || kleft || kright) {
 			refresh = true;
-		
-			if (kup)    { interp.y += unit; }
-			if (kdown)  { interp.y -= unit; }
-			if (kleft)  { interp.x += unit; }
-			if (kright) { interp.x -= unit; }
+
+			if (kup)    { if(0    == state.y &&      0 != interp.y) { interp.y = 0;          } else { interp.y += unit; } }
+			if (kleft)  { if(0    == state.x &&      0 != interp.x) { interp.x = 0;          } else { interp.x += unit; } }
+			if (kdown)  { if(maph == state.y && TILE_Y != interp.y) { interp.y = TILE_Y - 1; } else { interp.y -= unit; } }
+			if (kright) { if(mapw == state.x && TILE_X != interp.x) { interp.x = TILE_X - 1; } else { interp.x -= unit; } }
 
 			     if (interp.x >= TILE_X) { --state.x; }
 			else if (interp.x <       0) { ++state.x; }
@@ -329,10 +337,10 @@ void Game::update_input(const int unit) {
 		}
 	}
 
-	if (
+	running = !(
 		   is_pressed(K_ESCAPE, true)
 		|| is_pressed(K_Q,      true)
-	) { running = false; }
+	);
 
 	if (is_pressed(K_SPACE, true)) {
 		paused = !paused;
@@ -340,90 +348,59 @@ void Game::update_input(const int unit) {
 }
 
 void Game::update_bounds() {
-	int minx = state.x - mid_tiles_x;
-	int miny = state.y - mid_tiles_y;
-	int maxx = minx + max_tiles_x;
-	int maxy = miny + max_tiles_y;
+	int16 minx = (int16)state.x - mid_tiles_x;
+	int16 miny = (int16)state.y - mid_tiles_y;
+	int16 maxx = minx + max_tiles_x - 1;
+	int16 maxy = miny + max_tiles_y - 1;
 
-	minx -= interp.x > 0;
-	maxx -= interp.x > 0;
-	miny -= interp.y > 0;
-	maxy -= interp.y > 0;
+	minx -= 0 != interp.x;
+	miny -= 0 != interp.y;
 
-	bounds = {
-		  { minx, miny }
-		, { maxx, maxy }
-	};
-
-	printf("Min: (%d, %d) Max : (%d, %d) Interp: (%d, %d)\n", minx, miny, maxx, maxy, interp.x, interp.y);
+	bounds.min.x = minx;
+	bounds.min.y = miny;
+	bounds.max.x = maxx;
+	bounds.max.y = maxy;
 }
 
-bool Game::is_tile_dirty(const int x, const int y) {
-	const int tile_index = y * max_tiles_y + x;
-	return *(dirty + (tile_index >> 3)) & (1 << (tile_index & 0x07));
+const void Game::render_all() {
+	int16 xs = 0, xe = max_tiles_x;
+	int16 ys = 0, ye = max_tiles_y;
 
-	//const int   byte_index = tile_index >> 3;
-	//const ubyte bit_offset = tile_index & 0x07;
-	//return *(dirty + byte_index) & (1 << bit_offset);
-}
+	int16 xpos1 = 0, xpos2 = 0;
+	int16 ypos1 = 0, ypos2 = 0;
+	int16 t = 0, b = 0;
+	int16 l = 0, r = 0;
 
-void Game::render_all() {
-	int xs = 0, xe = max_tiles_x;
-	int ys = 0, ye = max_tiles_y;
+	const int16 posx = state.x - mid_tiles_x;
+	const int16 posy = state.y - mid_tiles_y;
 
-	int xpos1 = 0, xpos2 = 0;
-	int ypos1 = 0, ypos2 = 0;
-	int t = 0, b = 0;
-	int l = 0, r = 0;
-
-	const long posx = state.x - mid_tiles_x;
-	const long posy = state.y - mid_tiles_y;
-
-	int mapposx1 = posx;
-	int mapposy1 = posy;
-	int mapposx2 = posx + max_tiles_x;
-	int mapposy2 = posy + max_tiles_y;
-
-	ulong* bits = buffer->bits;
+	int16 mapposx1 = posx;
+	int16 mapposy1 = posy;
+	int16 mapposx2 = posx + max_tiles_x;
+	int16 mapposy2 = posy + max_tiles_y;
 
 	if (interp.x) {
-		xpos1 = interp.x;
-		xpos2 = interp.x + max_tiles_x * TILE_X;
-		l = -interp.x;
+		const int8 x = interp.x - TILE_X;
+		xpos1 = x;
+		xpos2 = x + max_px_x;
+		l = -x;
 		r = interp.x;
 
-		if (interp.x <= 0) {
-			xs = 1;
-			r += TILE_X;
-		} else {
-			--xe;
-			l += TILE_X;
-			xpos1 -= TILE_X;
-			xpos2 -= TILE_X;
-
-			--mapposx1;
-			--mapposx2;
-		}
+		--xe;
+		--mapposx1;
+		--mapposx2;
 	}
 
 	if (interp.y) {
-		ypos1 = interp.y;
-		ypos2 = interp.y + max_tiles_y * TILE_Y;
-		t = -interp.y;
+		const int8 y = interp.y - TILE_Y;
+		ypos1 = y;
+		ypos2 = y + max_px_y;
+		t = -y;
 		b = interp.y;
 
-		if (interp.y <= 0) {
-			ys = 1;
-			b += TILE_Y;
-		} else {
-			--ye;
-			t += TILE_Y;
-			ypos1 -= TILE_Y;
-			ypos2 -= TILE_Y;
-
-			--mapposy1;
-			--mapposy2;
-		}
+		--ye;
+		--mapposy1;
+		--mapposy2;
 	}
 
 	const bool mapx1_inbounds = mapposx1 >= 0 && mapposx1 < (int)mapw;
@@ -431,8 +408,8 @@ void Game::render_all() {
 	const bool mapy1_inbounds = mapposy1 >= 0 && mapposy1 < (int)maph;
 	const bool mapy2_inbounds = mapposy2 >= 0 && mapposy2 < (int)maph;
 
-	const int moff1 = mapposy1 * maph;
-	const int moff2 = mapposy2 * maph;
+	const int16 moff1 = mapposy1 * maph;
+	const int16 moff2 = mapposy2 * maph;
 
 	if (ys <= -posy) { ys = -posy; }
 	if (ye <= -posy) { ye = -posy; }
@@ -444,14 +421,14 @@ void Game::render_all() {
 	if (xs >= -posx + mapw) { xs = -posx + mapw; }
 	if (xe >= -posx + mapw) { xe = -posx + mapw; }
 
-	ulong mapval;
-	uint tindex, oindex;
-	int xpos, ypos, moff;
-	int mapposx, mapposy;
+	uint32 mapval;
+	uint16 tindex, oindex;
+	int16 xpos, ypos, moff;
+	int16 mapposx, mapposy;
 
 	// left and right edges
 	if (interp.x) {
-		for (int y = ys; y < ye; ++y) {
+		for (int16 y = ys; y < ye; ++y) {
 			mapposy = y + posy;
 
 			ypos = (y * TILE_Y) + interp.y;
@@ -491,7 +468,7 @@ void Game::render_all() {
 
 	// top and bottom edges
 	if (interp.y) {
-		for (int x = xs; x < xe; ++x) {
+		for (int16 x = xs; x < xe; ++x) {
 			mapposx = x + posx;
 
 			xpos = (x * TILE_X) + interp.x;
@@ -592,13 +569,13 @@ void Game::render_all() {
 	}
 
 	// main area
-	for (int y = ys; y < ye; ++y) {
+	for (int16 y = ys; y < ye; ++y) {
 		mapposy = y + posy;
 
 		ypos = (y * TILE_Y) + interp.y;
 		moff = mapposy * maph;
 
-		for (int x = xs; x < xe; ++x) {
+		for (int16 x = xs; x < xe; ++x) {
 			mapposx = x + posx;
 
 			mapval = map[moff + mapposx];
@@ -618,354 +595,78 @@ void Game::render_all() {
 	}
 }
 
-void Game::render_dirty() {
-	return;
-	int xs = 0, xe = max_tiles_x;
-	int ys = 0, ye = max_tiles_y;
+const void Game::render_dirty() {
+	const int16 posx = state.x - mid_tiles_x;
+	const int16 posy = state.y - mid_tiles_y;
 
-	int xpos1 = 0, xpos2 = 0;
-	int ypos1 = 0, ypos2 = 0;
-	int t = 0, b = 0;
-	int l = 0, r = 0;
-
-	const long posx = state.x - mid_tiles_x;
-	const long posy = state.y - mid_tiles_y;
-
-	int mapposx1 = posx;
-	int mapposy1 = posy;
-	int mapposx2 = posx + max_tiles_x;
-	int mapposy2 = posy + max_tiles_y;
+	int16 t, b, l, r;
 
 	if (interp.x) {
-		xpos1 = interp.x;
-		xpos2 = interp.x + max_tiles_x * TILE_X;
-		l = -interp.x;
+		l = -interp.x + TILE_X;
 		r =  interp.x;
-
-		if (interp.x <= 0) {
-			xs = 1;
-			r += TILE_X;
-		} else {
-			--xe;
-			l += TILE_X;
-			xpos1 -= TILE_X;
-			xpos2 -= TILE_X;
-
-			--mapposx1;
-			--mapposx2;
-		}
+	} else {
+		l = 0;
+		r = 0;
 	}
 
 	if (interp.y) {
-		ypos1 = interp.y;
-		ypos2 = interp.y + max_tiles_y * TILE_Y;
-		t = -interp.y;
+		t = -interp.y + TILE_Y;
 		b =  interp.y;
-
-		if (interp.y <= 0) {
-			ys = 1;
-			b += TILE_Y;
-		} else {
-			--ye;
-			t += TILE_Y;
-			ypos1 -= TILE_Y;
-			ypos2 -= TILE_Y;
-
-			--mapposy1;
-			--mapposy2;
-		}
+	} else {
+		t = 0;
+		b = 0;
 	}
 
 	DirtyTile dt;
-	ulong mapval;
 	uint tindex, oindex;
 
-	for (int i = 0; i < dirty_len; ++i) {
+	for (uint16 i = 0; i < dirty_len; ++i) {
 		dt = *(dirty_tiles + i);
 
-		int mapposx = posx + dt.pos.x;
-		int mapposy = posy + dt.pos.y;
+		const int16 dx = (int16)dt.pos.x;
+		const int16 dy = (int16)dt.pos.y;
 
-		/*if (
-			   mapposx < mapposx1
-			|| mapposx > mapposx2
-			|| mapposy < mapposy1
-			|| mapposy > mapposy2
-		) { continue;  }*/
+		const int16 xpos = (dx - posx) * TILE_X + interp.x;
+		const int16 ypos = (dy - posy) * TILE_Y + interp.y;
 
-		//bool top = 
-
-		const int xpos = (mapposx * TILE_X) + interp.x;
-		const int ypos = (mapposy * TILE_Y) + interp.y;
-
+		const bool on_l = dx < bounds.min.x || (dx == bounds.min.x && 0 != interp.x);
+		const bool on_r = dx > bounds.max.x || (dx == bounds.max.x && 0 != interp.x);
+		const bool on_t = dy < bounds.min.y || (dy == bounds.min.y && 0 != interp.y);
+		const bool on_b = dy > bounds.max.y || (dy == bounds.max.y && 0 != interp.y);
 
 		tindex = (dt.tile & 0x7fff0000) >> 16;
 		if (tindex) {
 			oindex = dt.tile & 0x0000ffff;
 
-			if (oindex) {
-				copy_to_buffer_masked(tindex, oindex, xpos, ypos);
+			if (on_t || on_b || on_r || on_l) {
+				if (on_t) { b = 0; }
+				if (on_b) { t = 0; }
+				if (on_l) { r = 0; }
+				if (on_r) { l = 0; }
+				if (!on_t && !on_b) { t = 0; b = 0; }
+				if (!on_l && !on_r) { l = 0; r = 0; }
+
+				if (oindex) {
+					copy_to_buffer_clip_masked(tindex, oindex, xpos, ypos, t, l, b, r);
+				} else {
+					copy_to_buffer_clip(tindex, xpos, ypos, t, l, b, r);
+				}
 			} else {
-				copy_to_buffer(tindex, xpos, ypos);
-			}
-		}
-	}
-	/*int xs = 0, xe = max_tiles_x;
-	int ys = 0, ye = max_tiles_y;
-
-	int xpos1 = 0, xpos2 = 0;
-	int ypos1 = 0, ypos2 = 0;
-	int t = 0, b = 0;
-	int l = 0, r = 0;
-
-	const long posx = state.x - mid_tiles_x;
-	const long posy = state.y - mid_tiles_y;
-
-	int mapposx1 = posx;
-	int mapposy1 = posy;
-	int mapposx2 = posx + max_tiles_x;
-	int mapposy2 = posy + max_tiles_y;
-
-	ulong *bits = buffer->bits;
-
-	if (interp.x) {
-		xpos1 = interp.x;
-		xpos2 = interp.x + max_tiles_x * TILE_X;
-		l = -interp.x;
-		r =  interp.x;
-
-		if (interp.x <= 0) {
-			xs = 1;
-			r += TILE_X;
-		} else {
-			--xe;
-			l += TILE_X;
-			xpos1 -= TILE_X;
-			xpos2 -= TILE_X;
-
-			--mapposx1;
-			--mapposx2;
-		}
-	}
-
-	if (interp.y) {
-		ypos1 = interp.y;
-		ypos2 = interp.y + max_tiles_y * TILE_Y;
-		t = -interp.y;
-		b =  interp.y;
-
-		if (interp.y <= 0) {
-			ys = 1;
-			b += TILE_Y;
-		} else {
-			--ye;
-			t += TILE_Y;
-			ypos1 -= TILE_Y;
-			ypos2 -= TILE_Y;
-
-			--mapposy1;
-			--mapposy2;
-		}
-	}
-
-	const bool mapx1_inbounds = mapposx1 >= 0 && mapposx1 < (int)mapw;
-	const bool mapx2_inbounds = mapposx2 >= 0 && mapposx2 < (int)mapw;
-	const bool mapy1_inbounds = mapposy1 >= 0 && mapposy1 < (int)maph;
-	const bool mapy2_inbounds = mapposy2 >= 0 && mapposy2 < (int)maph;
-
-	const int moff1 = mapposy1 * maph;
-	const int moff2 = mapposy2 * maph;
-
-	if (ys <= -posy) { ys = -posy; }
-	if (ye <= -posy) { ye = -posy; }
-	if (ys >= -posy + maph) { ys = -posy + maph; }
-	if (ye >= -posy + maph) { ye = -posy + maph; }
-	
-	if (xs <= -posx) { xs = -posx; }
-	if (xe <= -posx) { xe = -posx; }
-	if (xs >= -posx + mapw) { xs = -posx + mapw; }
-	if (xe >= -posx + mapw) { xe = -posx + mapw; }
-
-	ulong mapval;
-	uint tindex, oindex;
-	int xpos, ypos, moff;
-	int mapposx, mapposy;
-
-	// left and right edges
-	if (interp.x) {
-		for (int y = ys; y < ye; ++y) {
-			mapposy = y + posy;
-
-			ypos = (y * TILE_Y) + interp.y;
-			moff = mapposy * maph;
-
-			if (mapx1_inbounds && is_tile_dirty(mapposx1, mapposy)) {
-				mapval = map[moff + mapposx1];
-				tindex = (mapval & 0x7fff0000) >> 16;
-				
-				if (tindex) {
-					oindex = mapval & 0x0000ffff;
-
-					if (oindex) {
-						copy_to_buffer_clip_masked(tindex, oindex, xpos1, ypos, 0, l, 0, 0);
-					} else {
-						copy_to_buffer_clip(tindex, xpos1, ypos, 0, l, 0, 0);
-					}
-				}
-			}
-
-			if (mapx2_inbounds && is_tile_dirty(mapposx2, mapposy)) {
-				mapval = map[moff + mapposx2];
-				tindex = (mapval & 0x7fff0000) >> 16;
-				
-				if (tindex) {
-					oindex = mapval & 0x0000ffff;
-
-					if (oindex) {
-						copy_to_buffer_clip_masked(tindex, oindex, xpos2, ypos, 0, 0, 0, r);
-					} else {
-						copy_to_buffer_clip(tindex, xpos2, ypos, 0, 0, 0, r);
-					}
-				}
-			}
-		}
-	}
-
-	// top and bottom edges
-	if (interp.y) {
-		for (int x = xs; x < xe; ++x) {
-			mapposx = x + posx;
-
-			xpos = (x * TILE_X) + interp.x;
-
-			if (mapy1_inbounds && is_tile_dirty(mapposx, mapposy1)) {
-				mapval = map[moff1 + mapposx];
-				tindex = (mapval & 0x7fff0000) >> 16;
-
-				if (tindex) {
-					oindex = mapval & 0x0000ffff;
-
-					if (oindex) {
-						copy_to_buffer_clip_masked(tindex, oindex, xpos, ypos1, t, 0, 0, 0);
-					} else {
-						copy_to_buffer_clip(tindex, xpos, ypos1, t, 0, 0, 0);
-					}
-				}
-			}
-
-			if (mapy2_inbounds && is_tile_dirty(mapposx, mapposy2)) {
-				mapval = map[moff2 + mapposx];
-				tindex = (mapval & 0x7fff0000) >> 16;
-				
-				if (tindex) {
-					oindex = mapval & 0x0000ffff;
-
-					if (oindex) {
-						copy_to_buffer_clip_masked(tindex, oindex, xpos, ypos2, 0, 0, b, 0);
-					} else {
-						copy_to_buffer_clip(tindex, xpos, ypos2, 0, 0, b, 0);
-					}
-				}
-			}
-		}
-	}
-
-	// corners
-	if (interp.y && interp.x) {
-		if (mapy1_inbounds && mapx1_inbounds && is_tile_dirty(mapposx1, mapposy1)) {
-			mapval = map[moff1 + mapposx1];
-			tindex = (mapval & 0x7fff0000) >> 16;
-			
-			if (tindex) {
-				oindex = mapval & 0x0000ffff;
-
 				if (oindex) {
-					copy_to_buffer_clip_masked(tindex, oindex, xpos1, ypos1, t, l, 0, 0);
+					copy_to_buffer_masked(tindex, oindex, xpos, ypos);
 				} else {
-					copy_to_buffer_clip(tindex, xpos1, ypos1, t, l, 0, 0);
-				}
-			}
-		}
-
-		if (mapy1_inbounds && mapx2_inbounds && is_tile_dirty(mapposx2, mapposy1)) {
-			mapval = map[moff1 + mapposx2];
-			tindex = (mapval & 0x7fff0000) >> 16;
-			
-			if (tindex) {
-				oindex = mapval & 0x0000ffff;
-
-				if (oindex) {
-					copy_to_buffer_clip_masked(tindex, oindex, xpos2, ypos1, t, 0, 0, r);
-				} else {
-					copy_to_buffer_clip(tindex, xpos2, ypos1, t, 0, 0, r);
-				}
-			}
-		}
-
-		if (mapy2_inbounds && mapx1_inbounds && is_tile_dirty(mapposx1, mapposy2)) {
-			mapval = map[moff2 + mapposx1];
-			tindex = (mapval & 0x7fff0000) >> 16;
-			
-			if (tindex) {
-				oindex = mapval & 0x0000ffff;
-
-				if (oindex) {
-					copy_to_buffer_clip_masked(tindex, oindex, xpos1, ypos2, 0, l, b, 0);
-				} else {
-					copy_to_buffer_clip(tindex, xpos1, ypos2, 0, l, b, 0);
-				}
-			}
-		}
-
-		if (mapy2_inbounds && mapx2_inbounds && is_tile_dirty(mapposx2, mapposy2)) {
-			mapval = map[moff2 + mapposx2];
-			tindex = (mapval & 0x7fff0000) >> 16;
-			
-			if (tindex) {
-				oindex = mapval & 0x0000ffff;
-
-				if (oindex) {
-					copy_to_buffer_clip_masked(tindex, oindex, xpos2, ypos2, 0, 0, b, r);
-				} else {
-					copy_to_buffer_clip(tindex, xpos2, ypos2, 0, 0, b, r);
+					copy_to_buffer(tindex, xpos, ypos);
 				}
 			}
 		}
 	}
-
-	// main area
-	for (int y = ys; y < ye; ++y) {
-		mapposy = y + posy;
-
-		ypos = (y * TILE_Y) + interp.y;
-		moff = mapposy * maph;
-
-		for (int x = xs; x < xe; ++x) {
-			mapposx = x + posx;
-
-			if (!is_tile_dirty(mapposx, mapposy)) { continue; }
-
-			mapval = map[moff + mapposx];
-			tindex = (mapval & 0x7fff0000) >> 16;
-			
-			if (!tindex) { continue; }
-
-			xpos = (x * TILE_X) + interp.x;
-
-			oindex = mapval & 0x0000ffff;
-			if (oindex) {
-				copy_to_buffer_masked(tindex, oindex, xpos, ypos);
-			} else {
-				copy_to_buffer(tindex, xpos, ypos);
-			}
-		}
-	}*/
 }
 
 bool Game::render() {
 	if (refresh) {
 		render_all();
 		refresh = false;
+		dirty_len = 0;
 
 		return true;
 	} else if(dirty_len) {
@@ -988,13 +689,22 @@ bool Game::resize(const int w, const int h) {
 	mid_tiles_x = floor(max_tiles_x * 0.5f);
 	mid_tiles_y = floor(max_tiles_y * 0.5f);
 
+	max_px_y = max_tiles_y * TILE_Y;
+	max_px_x = max_tiles_x * TILE_X;
+
 	update_bounds();
 
 	return true;
 }
 
-void Game::flag_dirt(const uint x, const uint y) {
-	
+void Game::flag_dirt(const uint16 x, const uint16 y) {
+	if (
+		   (int16)x < bounds.min.x
+		|| (int16)x > bounds.max.x
+		|| (int16)y < bounds.min.y
+		|| (int16)y > bounds.max.y
+	) { return; }
+
 	const uint moff = y * maph;
 
 	*(dirty_tiles + dirty_len) = { map[moff + x], { x, y } };

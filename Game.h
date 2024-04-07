@@ -3,9 +3,7 @@
 #define GAME_H
 
 #include "Buffer.h"
-#include "Point2l.h"
-#include "Point2ul.h"
-#include "Point2b.h"
+#include "Point2.h"
 #include "Bitmap.h"
 
 #define K_ESCAPE       0x01
@@ -115,13 +113,13 @@ enum tile_type {
 };
 
 struct DirtyTile {
-	ulong    tile;
-	Point2ul pos;
+	ulong tile;
+	Point2<uint16> pos;
 };
 
 struct Bounds {
-	Point2l min;
-	Point2l max;
+	Point2<int16> min;
+	Point2<int16> max;
 };
 
 class Game {
@@ -137,8 +135,8 @@ public:
 
 	void update(const float);
 	bool render();
-	void render_all();
-	void render_dirty();
+	const void render_all();
+	const void render_dirty();
 
 	bool resize(const int, const int);
 	void update_input(const int);
@@ -160,42 +158,42 @@ public:
 
 	bool is_pressed(const ubyte, const bool);
 
-	void flag_dirt(const uint, const uint);
-
-
-	bool is_tile_dirty(const int, const int);
+	void flag_dirt(const uint16 x, const uint16 y);
 
 	bool running;
 	bool paused;
 	bool refresh;
 
-	int max_tiles_x;
-	int max_tiles_y;
+	uint8 max_tiles_x;
+	uint8 max_tiles_y;
 
-	int mid_tiles_x;
-	int mid_tiles_y;
+	uint16 mid_tiles_x;
+	uint16 mid_tiles_y;
 
+	uint16 max_px_y;
+	uint16 max_px_x;
+	
 	Buffer *buffer;
 
-	ulong *map;
+	uint32 *map;
 
-	ulong *tiles;
-	ulong **tindices;
+	uint32 *tiles;
+	uint32 **tindices;
 
-	uint mapw;
-	uint maph;
+	uint16 mapw;
+	uint16 maph;
 
-	ulong _w;
-	ulong _h;
+	uint16 _w;
+	uint16 _h;
 
-	Bounds  bounds = {};
-	Point2l state  = {};
-	Point2b interp = {};
+	Bounds         bounds = {};
+	Point2<uint16> state  = {};
+	Point2<int8>   interp = {};
 
 	DirtyTile* dirty_tiles;
 		
-	ubyte *dirty;
-	int dirty_len;
+	uint8 *dirty;
+	uint16 dirty_len;
 
 	bool *key_press;
 };

@@ -3,7 +3,7 @@
 
 Game game;
 Win32 window;
-FPS fps;
+Time time;
 
 uint frames = 0;
 double frame_time = 0;
@@ -16,16 +16,15 @@ int main(int argc, char* argv[]) {
 	window.bits = (void**)(&buffer.bits);
 	window  .resize_callback = resize;
 	window    .draw_callback = draw;
-	fps.get_system_ticks = Win32::get_system_ticks;
-	fps._start_timer = Win32::start_timer;
-	fps. _stop_timer = Win32:: stop_timer;
+	time.  _start_timer = Win32::start_timer;
+	time._elapsed_timer = Win32:: stop_timer;
 
 	if (
 		   game  .init()
 		&& buffer.init(window.width, window.height)
 		&& window.init()
 	) {
-		fps.init();
+		time.init();
 		
 		run();
 	}
@@ -59,26 +58,29 @@ void init_lookups() {
 }
 
 void run() {
-	int fps_target = 60;
+	uint fps_target = 60;
 
-	fps.set_rate(fps_target);
+	const uint8 fps_handle = time.set_interval(1000.0 / (double)fps_target);
 
 	do {
 		if (!window.update()) { break; }
 
-		fps.update();
-		if (fps.update_frame) {
-			const int fps_handle = fps.start_timer();
+		time.update();
 
-			game.update(fps.delta);
+		interval &i = time.intervals[fps_handle];
+
+		if(i.update()) {
+			const uint8 frame_handle = time.start_timer();
+
+			game.update(i.delta);
 
 			draw();
 
-			frame_time += fps.stop_timer(fps_handle);
+			frame_time += time.stop_timer(frame_handle);
 			++frames;
 
 			if (frames == fps_target) {
-				//printf("Avg Frame Time: %.2f\xE6s\n", frame_time / frames);
+				printf("Avg Frame Time: %.2f\xE6s\n", frame_time / frames);
 				frame_time = 0;
 				frames     = 0;
 			}
@@ -86,6 +88,8 @@ void run() {
 			Sleep(1);
 		}
 	} while (game.running);
+
+	time.clear_interval(fps_handle);
 
 	window.close();
 }
