@@ -9,10 +9,10 @@
 
 void init();
 void init_lookups();
+void execute_frame();
 void run();
+void move();
 inline bool resize(int, int);
 inline void draw();
-
-Buffer buffer;
 
 #endif

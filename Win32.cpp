@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Win32.h"
+#include <thread>
 
 Win32* Win32::self = NULL;
 
@@ -15,13 +16,19 @@ Win32::Win32() {
 	 back_dc = NULL;
 	instance = NULL;
 
-	  resize_callback = NULL;
-	    draw_callback = NULL;
+	draw_callback = NULL;
+	move_callback = NULL;
 
-	width  = 640;
-	height = 480;
-	rect = { 0, 0, (long)width, (long)height };
+	buffer_width  = 0;
+	buffer_height = 0;
+	window_width  = 0;
+	window_height = 0;
+
+	resize_move = false;
+
+	rect = { };
 	color_depth = 32;
+
 	fullscreen = true;
 	cname = L"RPG";
 	wname = L"RPG";
@@ -38,37 +45,61 @@ LRESULT CALLBACK Win32::proc(HWND window, uint msg, WPARAM wparam, LPARAM lparam
 LRESULT CALLBACK Win32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM lparam) {
 	switch (msg) {
 		case WM_SIZE: {
-			short raw_w = LOWORD(lparam);
-			short raw_h = HIWORD(lparam);
+			uint16 raw_w = LOWORD(lparam);
+			uint16 raw_h = HIWORD(lparam);
 
-			uint w = raw_w <= 64 ? 64 : raw_w;
-			uint h = raw_h <= 64 ? 64 : raw_h;
+			uint16 w = raw_w <= 64 ? 64 : raw_w;
+			uint16 h = raw_h <= 64 ? 64 : raw_h;
 
-			if (resize(w, h)) {
-				resize_callback(w, h);
-			}
-			return 0;
+			resize(w, h);
+
+			break;
+		}
+		// This is a hack. The MOVE / SIZE message triggers its own loop
+		// and doesn't return back to the main Peek loop until it is done.
+		// This causes the entire game to halt until the window is finished
+		// dragging / resizing. To get around this, We set a timer that
+		// runs every 100ms. This triggers a 2nd game loop to run in a new
+		// thread for the duration of 100ms or until the event ends.
+		case WM_ENTERSIZEMOVE: {
+			SetTimer(window, NULL, 100u, NULL);
+			resize_move = true;
+			// execute the callback immediately, otherwise there will be a 100ms delay.
+			sizemove();
+			break;
+		}
+		case WM_EXITSIZEMOVE: {
+			KillTimer(window, NULL);
+			resize_move = false;
+			break;
+		}
+		case WM_TIMER: {
+			sizemove();
+			break;
 		}
 		case WM_KEYDOWN: {
 			uint mapped = map_key(wparam);
 			key_press[mapped] = TRUE;
-
-			return 0;
+			break;
 		}
 		case WM_KEYUP: {
 			uint mapped = map_key(wparam);
 			key_press[mapped] = FALSE;
-
-			return 0;
+			break;
 		}
 		case WM_DESTROY: {
 			PostQuitMessage(0);
-
 			return 0;
 		}
 	}
 
 	return DefWindowProc(window, msg, wparam, lparam);
+}
+
+void Win32::sizemove() {
+	// not sure if this will come back to bite me or not
+	std::thread t(move_callback);
+	t.detach();
 }
 
 uint Win32::map_key(WPARAM wparam) {
@@ -164,7 +195,12 @@ uint Win32::map_key(WPARAM wparam) {
 	return 0;
 }
 
-bool Win32::init() {
+bool Win32::init(const uint16 width, const uint16 height) {
+	buffer_width  = window_width  = width;
+	buffer_height = window_height = height;
+	rect.right  = window_width;
+	rect.bottom = window_height;
+
 	timeBeginPeriod(1);
 
 	HWND console = GetConsoleWindow();
@@ -243,12 +279,12 @@ bool Win32::init_window() {
 
 	info.bmiHeader = {
 		  sizeof(BITMAPINFOHEADER)
-		,  (long)width
-		, -(long)height
+		,  (long)window_width
+		, -(long)window_height
 		, 1
 		, color_depth
 		, BI_RGB
-		, width * height * 4UL
+		, window_width * window_height * 4UL
 		, 0
 		, 0
 		, 0
@@ -259,9 +295,9 @@ bool Win32::init_window() {
 }
 
 bool Win32::init_buffer() {
-	info.bmiHeader.biWidth = (long)width;
-	info.bmiHeader.biHeight = -(long)height;
-	info.bmiHeader.biSizeImage = width * height * 4UL;
+	info.bmiHeader.biWidth  =  (long)window_width;
+	info.bmiHeader.biHeight = -(long)window_height;
+	info.bmiHeader.biSizeImage = window_width * window_height * 4UL;
 
 	dib = CreateDIBSection(front_dc, &info, DIB_RGB_COLORS, bits, NULL, 0);
 	if (NULL == dib) { return false; }
@@ -310,8 +346,8 @@ bool Win32::full_screen() {
 		return false;
 	}
 
-	settings.dmPelsWidth = width;
-	settings.dmPelsHeight = height;
+	settings.dmPelsWidth  = window_width;
+	settings.dmPelsHeight = window_height;
 	settings.dmColor = color_depth;
 
 	int result = ChangeDisplaySettingsW(&settings, CDS_FULLSCREEN);
@@ -325,26 +361,25 @@ bool Win32::full_screen() {
 }
 
 bool Win32::swap_buffers() {
-	/*return 0 == StretchDIBits(front_dc
-		, 0, 0, width, height
-		, 0, 0, width, height
-		, *bits
-		, &info
-		, DIB_RGB_COLORS
-		, SRCCOPY
-	);*/
-
-	return BitBlt(front_dc, 0, 0, width, height, back_dc, 0, 0, SRCCOPY);
+	if (window_width == buffer_width && window_height == buffer_height) {
+		return BitBlt(front_dc, 0, 0, buffer_width, buffer_height, back_dc, 0, 0, SRCCOPY);
+	} else {
+		return 0 == StretchDIBits(front_dc
+			, 0, 0, window_width, window_height
+			, 0, 0, buffer_width, buffer_height
+			, *bits
+			, &info
+			, DIB_RGB_COLORS
+			, SRCCOPY
+		);
+	}
 }
 
-bool Win32::resize(ulong w, ulong h) {
-	width  = w;
-	height = h;
+void Win32::resize(const uint16 w, const uint16 h) {
+	window_width  = w;
+	window_height = h;
 
 	GetWindowRect(window, &rect);
-
-	unload_buffer();
-	return init_buffer();
 }
 
 bool Win32::update() {

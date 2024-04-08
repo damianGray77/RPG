@@ -1,9 +1,17 @@
 ﻿#include "pch.h"
 #include "Main.h"
 
+#define RES_X 640
+#define RES_Y 480
+
+Buffer buffer;
 Game game;
 Win32 window;
 Time time;
+Interval *fps;
+
+uint fps_target = 60;
+uint8 fps_handle;
 
 uint frames = 0;
 double frame_time = 0;
@@ -14,19 +22,25 @@ int main(int argc, char* argv[]) {
 	game.buffer = &buffer;
 	game.key_press = window.key_press;
 	window.bits = (void**)(&buffer.bits);
-	window  .resize_callback = resize;
-	window    .draw_callback = draw;
-	time.  _start_timer = Win32::start_timer;
+	window.draw_callback = draw;
+	window.move_callback = move;
+	time  ._start_timer = Win32::start_timer;
 	time._elapsed_timer = Win32:: stop_timer;
 
 	if (
 		   game  .init()
-		&& buffer.init(window.width, window.height)
-		&& window.init()
+		&& buffer.init(RES_X, RES_Y)
+		&& game.resize(RES_X, RES_Y)
+		&& window.init(RES_X, RES_Y)
 	) {
 		time.init();
-		
+
+		fps_handle = time.set_interval((float)(1000.0 / (double)fps_target));
+		fps = &time.intervals[fps_handle];
+
 		run();
+
+		time.clear_interval(fps_handle);
 	}
 
 	window.unload();
@@ -58,40 +72,47 @@ void init_lookups() {
 }
 
 void run() {
-	uint fps_target = 60;
-
-	const uint8 fps_handle = time.set_interval(1000.0 / (double)fps_target);
-
 	do {
 		if (!window.update()) { break; }
 
-		time.update();
-
-		interval &i = time.intervals[fps_handle];
-
-		if(i.update()) {
-			const uint8 frame_handle = time.start_timer();
-
-			game.update(i.delta);
-
-			draw();
-
-			frame_time += time.stop_timer(frame_handle);
-			++frames;
-
-			if (frames == fps_target) {
-				printf("Avg Frame Time: %.2f\xE6s\n", frame_time / frames);
-				frame_time = 0;
-				frames     = 0;
-			}
-		} else {
-			Sleep(1);
-		}
+		execute_frame();
 	} while (game.running);
 
-	time.clear_interval(fps_handle);
-
 	window.close();
+}
+
+void move() {
+	const uint8 move_handle = time.set_interval(100.0);
+	Interval &move = time.intervals[move_handle];
+
+	while (game.running && window.resize_move && !move.update()) {
+		execute_frame();
+	}
+
+	time.clear_interval(move_handle);
+}
+
+void execute_frame() {
+	time.update();
+
+	if(fps->update()) {
+		const uint8 frame_handle = time.start_timer();
+
+		game.update(fps->delta);
+
+		draw();
+
+		frame_time += time.stop_timer(frame_handle);
+		++frames;
+
+		if (frames == fps_target) {
+			printf("Avg Frame Time: %.2f\xE6s\n", frame_time / frames);
+			frame_time = 0;
+			frames     = 0;
+		}
+	} else {
+		Sleep(1);
+	}
 }
 
 inline bool resize(int w, int h) {

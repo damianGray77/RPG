@@ -426,6 +426,36 @@ const void Game::render_all() {
 	int16 xpos, ypos, moff;
 	int16 mapposx, mapposy;
 
+	if (xs > bounds.min.x || xe < bounds.max.x || ys > bounds.min.y || ye < bounds.max.y) {
+		const uint32 y1 = (ys * TILE_Y) + interp.y;
+		const uint32 y2 = (ye * TILE_Y) + interp.y;
+
+		if (ys > bounds.min.y) {
+			memset(buffer->bits, 0x00000000, (y1 * (uint32)_w) * sizeof(uint32));
+		}
+
+		if (ye < bounds.max.y) {
+			uint32* bptr = buffer->bits + y2 * (uint32)_w;
+			memset(bptr, 0x00000000, ((_h - y2) * (uint32)_w) * sizeof(uint32));
+		}
+
+		if (xs > bounds.min.x) {
+			const uint32 x = (xs * TILE_X) + interp.x;
+			for (uint32 y = y1; y < y2; ++y) {
+				uint32* bptr = buffer->bits + y * _w;
+				memset(bptr, 0x00000000, x * sizeof(uint32));
+			}
+		}
+
+		if (xe < bounds.max.x) {
+			const uint32 x = (xe * TILE_X) + interp.x;
+			for (uint32 y = y1; y < y2; ++y) {
+				uint32* bptr = buffer->bits + y * _w + x;
+				memset(bptr, 0x00000000, (_w - x) * sizeof(uint32));
+			}
+		}
+	}
+
 	// left and right edges
 	if (interp.x) {
 		for (int16 y = ys; y < ye; ++y) {

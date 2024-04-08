@@ -2,7 +2,7 @@
 #ifndef TIME_H
 #define TIME_H
 
-struct interval {
+struct Interval {
 	float last;
 	float dur;
 	float elapsed;
@@ -30,7 +30,7 @@ public:
 	float delta;
 
 	float       timers[256] = { };
-	interval intervals[256] = { };
+	Interval intervals[256] = { };
 
 	long long(*_start_timer)(double &);
 	double(*_elapsed_timer)(long long, double);

@@ -17,11 +17,10 @@ void Time::update() {
 	}
 }
 
-// BUG: Timers / intervals are working correctly from a timing standpoint, but
-// storing them in a 256 index array and removing them or adding too many will
-// cause issues with running over empty slots or overwriting in-use indices.
 const uint8 Time::start_timer() {
-	const uint8 ret = utimer_count++;
+	uint8 ret = 0; // find the first available (0-value) slot
+	while (timers[ret]) { ++ret; }
+	if (ret >= utimer_count) { utimer_count = ret + 1; }
 
 	timers[ret] = (float)_elapsed_timer(ticks, freq);
 
@@ -43,7 +42,9 @@ const float Time::stop_timer(const uint8 handle) {
 /// <param name="duration">Duration in millisections</param>
 /// <returns>A handle for the interval</returns>
 const uint8 Time::set_interval(const float duration) {
-	const uint8 ret = uinterval_count++;
+	uint8 ret = 0; // find the first available (0-value) slot
+	while (intervals[ret].last) { ++ret; }
+	if (ret >= uinterval_count) { uinterval_count = ret + 1; }
 
 	const float start = (float)(_elapsed_timer(ticks, freq) * 0.001);
 

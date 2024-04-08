@@ -20,18 +20,25 @@ public:
 	BITMAPINFO info;
 	MSG msg;
 	RECT rect;
-	ulong width;
-	ulong height;
+
+	uint16 buffer_width;
+	uint16 buffer_height;
+
+	uint16 window_width;
+	uint16 window_height;
+
 	ushort color_depth;
 	bool fullscreen;
 	LPCWSTR cname;
 	LPCWSTR wname;
 	int cores;
 
+	bool resize_move;
+
 	bool key_press[256] = {};
 
-	bool (*resize_callback)(int, int);
 	void (  *draw_callback)();
+	void (  *move_callback)();
 
 	static Win32* self;
 
@@ -40,14 +47,15 @@ public:
 
 	static LRESULT CALLBACK proc(HWND, uint, WPARAM, LPARAM);
 
-	bool init();
+	bool init(const uint16 width, const uint16 height);
 	bool init_window();
 	bool init_buffer();
 	void unload();
 	void unload_buffer();
 	bool full_screen();
 	bool swap_buffers();
-	bool resize(ulong, ulong);
+	void resize(const uint16 width, const uint16 height);
+	void sizemove();
 	bool update();
 	uint map_key(WPARAM);
 	void close();
