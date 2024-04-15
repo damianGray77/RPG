@@ -2,6 +2,8 @@
 #ifndef CORE_H
 #define CORE_H
 
+#include "Point2.h"
+
 #define EPSILON 0 //1e-4
 #define PI 3.14159265358f
 #define SINCOSMAX 32767
@@ -55,19 +57,24 @@ inline void SWAP(T* a, T* b) {
 #define CLAMP(x, min, max) (x <= min ? min : x >= max ? max : x)
 #define WRAP(x, min, max) (x <= min ? x + max : x >= max ? x - max : x)
 
-inline int floor(float x) {
-	int xint = (int)x;
+template <typename TOut, typename TIn> inline TOut floor(const TIn x) {
+	TOut xint = (TOut)x;
 	return xint - (x < xint);
-}
+};
 
-inline int ceil(float x) {
-	int xint = (int)x;
+template <typename TOut, typename TIn> inline TOut ceil(const TIn x) {
+	TOut xint = (TOut)x;
 	return xint + (x > xint);
-}
+};
 
 template <typename T> inline T clamp(const T x, const T min, const T max) {
 	return x <= min ? min : x >= max ? max : x;
-}
+};
+
+template <typename T> struct Bounds {
+	Point2<T> min;
+	Point2<T> max;
+};
 
 
 const float  fixed8_divisor = 1.0f / (1 <<  8);

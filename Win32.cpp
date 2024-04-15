@@ -16,13 +16,14 @@ Win32::Win32() {
 	 back_dc = NULL;
 	instance = NULL;
 
-	draw_callback = NULL;
-	move_callback = NULL;
+	    draw_callback = NULL;
+	sizemove_callback = NULL;
 
 	buffer_width  = 0;
 	buffer_height = 0;
 	window_width  = 0;
 	window_height = 0;
+	minmax = { };
 
 	resize_move = false;
 
@@ -45,13 +46,34 @@ LRESULT CALLBACK Win32::proc(HWND window, uint msg, WPARAM wparam, LPARAM lparam
 LRESULT CALLBACK Win32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM lparam) {
 	switch (msg) {
 		case WM_SIZE: {
-			uint16 raw_w = LOWORD(lparam);
-			uint16 raw_h = HIWORD(lparam);
-
-			uint16 w = raw_w <= 64 ? 64 : raw_w;
-			uint16 h = raw_h <= 64 ? 64 : raw_h;
+			uint16 w = LOWORD(lparam);
+			uint16 h = HIWORD(lparam);
+			
+			// TODO how to enforce the aspect ratio to limit the size of the window while dragging?
+			/*if (w > h) {
+				h = ceil<float>(w * buffer_height / (float)buffer_width);
+			} else if(h > w) {
+				w = ceil<float>(h * buffer_width / (float)buffer_height);
+			}*/
 
 			resize(w, h);
+
+			break;
+		}
+		case WM_GETMINMAXINFO: {
+			MINMAXINFO *mmi = (MINMAXINFO *)lparam;
+			
+			mmi->ptMinTrackSize.x = minmax.min.x;
+			mmi->ptMinTrackSize.y = minmax.min.y;
+
+			mmi->ptMaxTrackSize.x = minmax.max.x;
+			mmi->ptMaxTrackSize.y = minmax.max.y;
+
+			break;
+		}
+		// This prevents the flicker than will otherwise occur when resizing the window
+		case WM_PAINT: {
+			swap_buffers();
 
 			break;
 		}
@@ -62,10 +84,11 @@ LRESULT CALLBACK Win32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM lpara
 		// runs every 100ms. This triggers a 2nd game loop to run in a new
 		// thread for the duration of 100ms or until the event ends.
 		case WM_ENTERSIZEMOVE: {
-			SetTimer(window, NULL, 100u, NULL);
-			resize_move = true;
 			// execute the callback immediately, otherwise there will be a 100ms delay.
 			sizemove();
+
+			SetTimer(window, NULL, 100u, NULL);
+			resize_move = true;
 			break;
 		}
 		case WM_EXITSIZEMOVE: {
@@ -97,8 +120,7 @@ LRESULT CALLBACK Win32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM lpara
 }
 
 void Win32::sizemove() {
-	// not sure if this will come back to bite me or not
-	std::thread t(move_callback);
+	std::thread t(sizemove_callback);
 	t.detach();
 }
 
@@ -200,6 +222,12 @@ bool Win32::init(const uint16 width, const uint16 height) {
 	buffer_height = window_height = height;
 	rect.right  = window_width;
 	rect.bottom = window_height;
+
+	minmax = {};
+	minmax.min.x = width  / 2;
+	minmax.max.x = width  * 2;
+	minmax.min.y = height / 2;
+	minmax.max.y = height * 2;
 
 	timeBeginPeriod(1);
 
@@ -379,6 +407,7 @@ void Win32::resize(const uint16 w, const uint16 h) {
 	window_width  = w;
 	window_height = h;
 
+
 	GetWindowRect(window, &rect);
 }
 
@@ -387,6 +416,9 @@ bool Win32::update() {
 		if (WM_QUIT == msg.message) { return false; }
 
 		TranslateMessage(&msg);
+
+		if (WM_MOVE == msg.message) { printf("FAIL"); }
+
 		DispatchMessageW(&msg);
 	}
 

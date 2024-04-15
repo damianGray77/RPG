@@ -49,6 +49,13 @@
     <ClCompile Include="Win32.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <Image Include="Resources\atile0001.bmp" />
+    <Image Include="Resources\char0001.bmp" />
+    <Image Include="Resources\over0001.bmp" />
+    <Image Include="Resources\over0002.bmp" />
+    <Image Include="Resources\tile0001.bmp" />
+    <Image Include="Resources\tile0002.bmp" />
+    <Image Include="Resources\tile0003.bmp" />
     <Image Include="RPG.ico" />
     <Image Include="small.ico" />
   </ItemGroup>

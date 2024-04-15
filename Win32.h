@@ -27,6 +27,8 @@ public:
 	uint16 window_width;
 	uint16 window_height;
 
+	Bounds<uint16> minmax;
+
 	ushort color_depth;
 	bool fullscreen;
 	LPCWSTR cname;
@@ -37,8 +39,8 @@ public:
 
 	bool key_press[256] = {};
 
-	void (  *draw_callback)();
-	void (  *move_callback)();
+	void (    *draw_callback)();
+	void (*sizemove_callback)();
 
 	static Win32* self;
 
@@ -65,7 +67,7 @@ public:
 		return timeGetTime();
 	}
 
-	static inline long long start_timer(double &freq) {
+	static inline uint64 start_timer(double &freq) {
 		LARGE_INTEGER lif, lic;
 		if (!QueryPerformanceFrequency(&lif)) { return NULL; }
 		
@@ -75,7 +77,7 @@ public:
 		return lic.QuadPart;
 	}
 
-	static inline double stop_timer(long long start, double freq) {
+	static inline double stop_timer(uint64 start, double freq) {
 		LARGE_INTEGER li;
 		QueryPerformanceCounter(&li);
 

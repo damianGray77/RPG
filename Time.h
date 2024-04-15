@@ -13,7 +13,7 @@ struct Interval {
 		if (diff < dur) { return false; }
 
 		last = elapsed;
-		delta = dur / diff;
+		delta = diff / 1000.0f;
 
 		return true;
 	}
@@ -32,8 +32,8 @@ public:
 	float       timers[256] = { };
 	Interval intervals[256] = { };
 
-	long long(*_start_timer)(double &);
-	double(*_elapsed_timer)(long long, double);
+	static uint64(*  _start_timer)(double &freq);
+	static double(*_elapsed_timer)(uint64 start, double freq);
 
 	void init();
 	void update();

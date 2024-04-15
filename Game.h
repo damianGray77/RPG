@@ -5,6 +5,7 @@
 #include "Buffer.h"
 #include "Point2.h"
 #include "Bitmap.h"
+#include "Time.h"
 
 #define K_ESCAPE       0x01
 #define K_1            0x02
@@ -105,21 +106,21 @@ enum bound {
 	, BOTTOM
 };
 
-enum tile_type {
+enum tile_type : uint32 {
 	  TILETYPE_NONE
 	, TILETYPE_BACK
 	, TILETYPE_MASK
 	, TILETYPE_ALPHA
 };
 
-struct DirtyTile {
-	ulong tile;
-	Point2<uint16> pos;
+struct TileAnim {
+	uint8  tile_index;
+	uint32 anim_handle;
 };
 
-struct Bounds {
-	Point2<int16> min;
-	Point2<int16> max;
+struct DirtyTile {
+	uint32 tile;
+	Point2<uint16> pos;
 };
 
 class Game {
@@ -131,16 +132,22 @@ public:
 	void load();
 	void load_map();
 	void load_tiles();
-	int load_tile(const char *, const tile_type, const int, const int);
+	void load_chars();
+	void load_anims();
+
+	uint32 load_tile(uint32* tbuf, uint32** tibuf, const char *file, const tile_type type, const uint16 i, const uint32 start);
 
 	void update(const float);
-	bool render();
-	const void render_all();
-	const void render_dirty();
+	const bool render();
+	const bool render_map();
+	const bool render_chars();
+	const void render_map_all();
+	const void render_map_dirty();
 
 	bool resize(const int, const int);
-	void update_input(const int);
+	void update_input(const uint16);
 	void update_bounds();
+	void update_anims();
 
 	void unload();
 
@@ -150,8 +157,8 @@ public:
 	void copy_to_buffer_masked(const int, const int, const int, const int);
 	void copy_to_buffer_clip_masked(const int, const int, const int, const int, const int, const int, const int, const int);
 
-	void copy_to_buffer_masked(const int, const int, const int, const int, const int);
-	void copy_to_buffer_clip_masked(const int, const int, const int, const int, const int, const int, const int, const int, const int);
+	void copy_to_buffer_masked(const uint32 **ibuf, const uint32 index, const uint16 x, const uint16 y);
+	void copy_to_buffer_clip_masked(const uint32 **ibuf, const uint32 index, const int, const int, const int, const int, const int, const int);
 
 	void copy_to_buffer_alpha(const int, const int, const int, const int);
 	void copy_to_buffer_clip_alpha(const int, const int, const int, const int, const int, const int, const int, const int);
@@ -159,6 +166,8 @@ public:
 	bool is_pressed(const ubyte, const bool);
 
 	void flag_dirt(const uint16 x, const uint16 y);
+
+	Time time;
 
 	bool running;
 	bool paused;
@@ -177,8 +186,15 @@ public:
 
 	uint32 *map;
 
+	uint32 *chars;
 	uint32 *tiles;
+	uint32 **cindices;
 	uint32 **tindices;
+	TileAnim tanims[256] = {};
+
+	uint8 char_count;
+	uint8 tile_count;
+	uint8 anim_count;
 
 	uint16 mapw;
 	uint16 maph;
@@ -186,7 +202,7 @@ public:
 	uint16 _w;
 	uint16 _h;
 
-	Bounds         bounds = {};
+	Bounds<int16>  bounds = {};
 	Point2<uint16> state  = {};
 	Point2<int8>   interp = {};
 

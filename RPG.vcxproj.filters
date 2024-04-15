@@ -87,6 +87,13 @@
     <Image Include="small.ico">
       <Filter>Resources</Filter>
     </Image>
+    <Image Include="Resources\atile0001.bmp" />
+    <Image Include="Resources\char0001.bmp" />
+    <Image Include="Resources\over0001.bmp" />
+    <Image Include="Resources\over0002.bmp" />
+    <Image Include="Resources\tile0001.bmp" />
+    <Image Include="Resources\tile0002.bmp" />
+    <Image Include="Resources\tile0003.bmp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="RPG.rc">

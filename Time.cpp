@@ -56,3 +56,7 @@ const uint8 Time::set_interval(const float duration) {
 const void Time::clear_interval(const uint8 handle) {
 	intervals[handle] = {};
 }
+
+// Empty functions. These will get overridden later by whatever OS timer functions are available.
+uint64 (*Time::  _start_timer)(double& freq) {};
+double (*Time::_elapsed_timer)(uint64 start, double freq) {};
