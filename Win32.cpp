@@ -3,6 +3,7 @@
 #include <thread>
 
 Win32* Win32::self = NULL;
+double Win32::query_perf_freq = 0;
 
 Win32::Win32() {
 	self = this;
@@ -230,6 +231,11 @@ bool Win32::init(const uint16 width, const uint16 height) {
 	minmax.max.y = height * 2;
 
 	timeBeginPeriod(1);
+
+	LARGE_INTEGER li;
+	if (QueryPerformanceFrequency(&li)) {
+		Win32::query_perf_freq = 1000000.0 / double(li.QuadPart);
+	}
 
 	HWND console = GetConsoleWindow();
 	ShowWindow(console, SW_SHOW); // SW_HIDE);

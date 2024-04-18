@@ -24,7 +24,6 @@ class Time {
 	uint8 uinterval_count;
 
 	uint64 ticks;
-	double freq;
 public:
 	bool  update_frame;
 	float delta;
@@ -32,8 +31,8 @@ public:
 	float       timers[256] = { };
 	Interval intervals[256] = { };
 
-	static uint64(*  _start_timer)(double &freq);
-	static double(*_elapsed_timer)(uint64 start, double freq);
+	static uint64(*  _start_timer)();
+	static double(*_elapsed_timer)(uint64 start);
 
 	void init();
 	void update();

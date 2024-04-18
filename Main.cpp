@@ -3,7 +3,7 @@
 
 #define RES_X 640
 #define RES_Y 480
-#define FPS_TARGET 20
+#define FPS_TARGET 60
 
 Buffer buffer;
 Game game;
@@ -93,7 +93,7 @@ void sizemove() {
 
 	while (game.running && window.resize_move && !sm.update()) {
 		if (async_frame) {
-			Sleep(1);
+			Sleep(0);
 			continue;
 		}
 		

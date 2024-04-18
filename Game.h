@@ -151,14 +151,14 @@ public:
 
 	void unload();
 
-	void copy_to_buffer(const int, const int, const int);
-	void copy_to_buffer_clip(const int, const int, const int, const int, const int, const int, const int);
+	void copy_to_buffer(const uint32 index, const uint32 x, const uint32 y);
+	void copy_to_buffer_clip(const uint32 index, const int32 x, const int32 y, const uint32 t, const uint32 l, const uint32 b, const uint32 r);
 
-	void copy_to_buffer_masked(const int, const int, const int, const int);
-	void copy_to_buffer_clip_masked(const int, const int, const int, const int, const int, const int, const int, const int);
+	void copy_to_buffer_masked(const uint32 tindex, const uint32 oindex, const uint32 x, const uint32 y);
+	void copy_to_buffer_clip_masked(const uint32 tindex, const uint32 oindex, const int32 x, const int32 y, const uint32 t, const uint32 l, const uint32 b, const uint32 r);
 
-	void copy_to_buffer_masked(const uint32 **ibuf, const uint32 index, const uint16 x, const uint16 y);
-	void copy_to_buffer_clip_masked(const uint32 **ibuf, const uint32 index, const int, const int, const int, const int, const int, const int);
+	void copy_to_buffer_masked(uint32 **ibuf, const uint32 index, const uint32 x, const uint32 y);
+	void copy_to_buffer_clip_masked(uint32 **ibuf, const uint32 index, const int32 x, const int32 y, const uint32 t, const uint32 l, const uint32 b, const uint32 r);
 
 	void copy_to_buffer_alpha(const int, const int, const int, const int);
 	void copy_to_buffer_clip_alpha(const int, const int, const int, const int, const int, const int, const int, const int);

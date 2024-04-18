@@ -211,23 +211,25 @@ uint32 Game::load_tile(uint32 *tbuf, uint32 **tibuf, const char *file, const til
 /// <summary>
 /// Copy a background tile to a buffer
 /// </summary>
-void Game::copy_to_buffer(const int index, const int x, const int y) {
+void Game::copy_to_buffer(const uint32 index, const uint32 x, const uint32 y) {
 	uint32 *tile = tindices[index];
+
+	const uint32 stride = (uint32)_w;
 
 	const uint32 info    = *tile;
 	const uint32 spr_ind = (info & TILE_MASK_INDEX) >> TILE_POS_INDEX;
 
 	const size_t size = sizeof(uint32) * TILE_X;
 
-	const uint32 boff = _w * y + x;
+	const uint32 boff = stride * y + x;
 	const uint32 aoff = TILE_X * TILE_Y * spr_ind;
 
-	uint32 *bptr = (uint32 *)(buffer->bits + boff);
-	uint32 *tptr = (uint32 *)(tile     + 1 + aoff);
-	for (int ty = 0; ty < TILE_Y; ++ty) {
+	uint32 *bptr = buffer->bits + boff;
+	uint32 *tptr = tile     + 1 + aoff;
+	for (uint32 ty = 0; ty < TILE_Y; ++ty) {
 		memcpy(bptr, tptr, size);
 
- 		bptr += _w;
+		bptr += stride;
 		tptr += TILE_X;
 	}
 }
@@ -235,28 +237,30 @@ void Game::copy_to_buffer(const int index, const int x, const int y) {
 /// <summary>
 /// Copy a background tile to a buffer
 /// </summary>
-void Game::copy_to_buffer_clip(const int index, const int x, const int y, const int t, const int l, const int b, const int r) {
-	uint32*tile = tindices[index];
+void Game::copy_to_buffer_clip(const uint32 index, const int32 x, const int32 y, const uint32 t, const uint32 l, const uint32 b, const uint32 r) {
+	uint32 *tile = tindices[index];
+
+	const uint32 stride = (uint32)_w;
 
 	const uint32 info = *tile;
 	const uint32 spr_ind = (info & TILE_MASK_INDEX) >> TILE_POS_INDEX;
 
-	const uint32 boff = _w * (y + t) + x + l;
+	const uint32 boff = stride * (y + t) + x + l;
 	const uint32 aoff = TILE_X * TILE_Y * spr_ind;
 	const uint32 toff = TILE_X * t + l + 1;
 
-	const int cw = TILE_X - r - l;
-	const int ch = TILE_Y - b - t;
+	const uint32 cw = TILE_X - r - l;
+	const uint32 ch = TILE_Y - b - t;
 
-	const size_t size = sizeof(ulong) * cw;
+	const size_t size = sizeof(uint32) * cw;
 
-	ulong *bptr = (ulong *)(buffer->bits + boff);
-	ulong *tptr = (ulong *)(tile  + aoff + toff);
+	uint32 *bptr = buffer->bits + boff;
+	uint32 *tptr = tile  + aoff + toff;
 
-	for (int ty = 0; ty < ch; ++ty) {
+	for (uint32 ty = 0; ty < ch; ++ty) {
 		memcpy(bptr, tptr, size);
 
-		bptr += _w;
+		bptr += stride;
 		tptr += TILE_X;
 	}
 }
@@ -264,26 +268,28 @@ void Game::copy_to_buffer_clip(const int index, const int x, const int y, const 
 /// <summary>
 /// Copy an overlay mask tile with a background tile to a buffer
 /// </summary>
-void Game::copy_to_buffer_masked(const int tindex, const int oindex, const int x, const int y) {
-	ulong *tile = tindices[tindex];
-	ulong *over = tindices[oindex];
+void Game::copy_to_buffer_masked(const uint32 tindex, const uint32 oindex, const uint32 x, const uint32 y) {
+	uint32 *tile = tindices[tindex];
+	uint32 *over = tindices[oindex];
 
-	const ulong boff = _w * y + x;
+	const uint32 stride = (uint32)_w;
 
-	ulong *bptr = (ulong*)(buffer->bits + boff);
-	ulong *tptr = (ulong*)(tile         + 1);
-	ulong *optr = (ulong*)(over         + 1);
+	const uint32 boff = stride * y + x;
 
-	for (int oy = 0; oy < TILE_Y; ++oy) {
-		for (int ox = 0; ox < TILE_X; ++ox) {
-			const ulong fore = *(optr + ox);
-			const ulong back = *(tptr + ox);
-			const ulong mask = -(0 == (fore & 0x00ffffff));
+	uint32 *bptr = buffer->bits + boff;
+	uint32 *tptr = tile         + 1;
+	uint32 *optr = over         + 1;
+
+	for (uint32 oy = 0; oy < TILE_Y; ++oy) {
+		for (uint32 ox = 0; ox < TILE_X; ++ox) {
+			const uint32 fore = *(optr + ox);
+			const uint32 back = *(tptr + ox);
+			const uint32 mask = -(0 == (fore & 0x00ffffff));
 
 			*(bptr + ox) = (back & mask) | (fore & ~mask);
 		}
 
-		bptr += _w;
+		bptr += stride;
 		optr += TILE_X;
 		tptr += TILE_X;
 	}
@@ -292,30 +298,32 @@ void Game::copy_to_buffer_masked(const int tindex, const int oindex, const int x
 /// <summary>
 /// Copy an overlay mask tile with a background tile to a buffer
 /// </summary>
-void Game::copy_to_buffer_clip_masked(const int tindex, const int oindex, const int x, const int y, const int t, const int l, const int b, const int r) {
-	ulong *tile = tindices[tindex];
-	ulong *over = tindices[oindex];
+void Game::copy_to_buffer_clip_masked(const uint32 tindex, const uint32 oindex, const int32 x, const int32 y, const uint32 t, const uint32 l, const uint32 b, const uint32 r) {
+	uint32 *tile = tindices[tindex];
+	uint32 *over = tindices[oindex];
 
-	const long boff = _w * (y + t) + x + l;
-	const long ooff = TILE_X * t + l + 1;
+	const uint32 stride = (uint32)_w;
 
-	const int cw = TILE_X - r - l;
-	const int ch = TILE_Y - b - t;
+	const uint32 boff = stride * (y + t) + x + l;
+	const uint32 ooff = TILE_X * t + l + 1;
 
-	ulong* bptr = (ulong*)(buffer->bits + boff);
-	ulong* tptr = (ulong*)(tile         + ooff);
-	ulong* optr = (ulong*)(over         + ooff);
+	const uint32 cw = TILE_X - r - l;
+	const uint32 ch = TILE_Y - b - t;
 
-	for (int oy = 0; oy < ch; ++oy) {
-		for (int ox = 0; ox < cw; ++ox) {
-			const ulong fore = *(optr + ox);
-			const ulong back = *(tptr + ox);
-			const ulong mask = -(0 == (fore & 0x00ffffff));
+	uint32 *bptr = buffer->bits + boff;
+	uint32 *tptr = tile         + ooff;
+	uint32 *optr = over         + ooff;
+
+	for (uint32 oy = 0; oy < ch; ++oy) {
+		for (uint32 ox = 0; ox < cw; ++ox) {
+			const uint32 fore = *(optr + ox);
+			const uint32 back = *(tptr + ox);
+			const uint32 mask = -(0 == (fore & 0x00ffffff));
 
 			*(bptr + ox) = (back & mask) | (fore & ~mask);
 		}
 
-		bptr += _w;
+		bptr += stride;
 		optr += TILE_X;
 		tptr += TILE_X;
 	}
@@ -324,19 +332,19 @@ void Game::copy_to_buffer_clip_masked(const int tindex, const int oindex, const 
 /// <summary>
 /// Copy an overlay mask tile with an arbitrary width and height to a buffer
 /// </summary>
-void Game::copy_to_buffer_masked(const uint32 **ibuf, const uint32 index, const uint16 x, const uint16 y) {
-	const uint32 *sprite = ibuf[index];
+void Game::copy_to_buffer_masked(uint32 **ibuf, const uint32 index, const uint32 x, const uint32 y) {
+	uint32 *sprite = ibuf[index];
 
-	const uint8 sw = (uint8)((*sprite & TILE_MASK_WIDTH)  >> TILE_POS_WIDTH);
-	const uint8 sh = (uint8)((*sprite & TILE_MASK_HEIGHT) >> TILE_POS_HEIGHT);
+	const uint32 sw = (*sprite & TILE_MASK_WIDTH)  >> TILE_POS_WIDTH;
+	const uint32 sh = (*sprite & TILE_MASK_HEIGHT) >> TILE_POS_HEIGHT;
 
 	const uint32 boff = _w * y + x;
 
-	uint32 *bptr = (uint32*)(buffer->bits + boff);
-	uint32 *sptr = (uint32*)(sprite       + 1);
+	uint32 *bptr = buffer->bits + boff;
+	uint32 *sptr = sprite       + 1;
 
-	for (uint8 oy = 0; oy < sh; ++oy) {
-		for (uint8 ox = 0; ox < sw; ++ox) {
+	for (uint32 oy = 0; oy < sh; ++oy) {
+		for (uint32 ox = 0; ox < sw; ++ox) {
 			const uint32 fore = *(sptr + ox);
 			const uint32 back = *(bptr + ox);
 			const uint32 mask = -(0 == (fore & 0x00ffffff));
@@ -352,23 +360,23 @@ void Game::copy_to_buffer_masked(const uint32 **ibuf, const uint32 index, const 
 /// <summary>
 /// Copy an overlay mask tile with an arbitrary width and height to a buffer
 /// </summary>
-void Game::copy_to_buffer_clip_masked(const uint32** ibuf, const uint32 index, const int x, const int y, const int t, const int l, const int b, const int r) {
-	const uint32 *sprite = ibuf[index];
+void Game::copy_to_buffer_clip_masked(uint32** ibuf, const uint32 index, const int32 x, const int32 y, const uint32 t, const uint32 l, const uint32 b, const uint32 r) {
+	uint32 *sprite = ibuf[index];
 
-	const uint8 sw = (uint8)(*sprite & TILE_MASK_WIDTH)  >> TILE_POS_WIDTH;
-	const uint8 sh = (uint8)(*sprite & TILE_MASK_HEIGHT) >> TILE_POS_HEIGHT;
+	const uint32 sw = (*sprite & TILE_MASK_WIDTH)  >> TILE_POS_WIDTH;
+	const uint32 sh = (*sprite & TILE_MASK_HEIGHT) >> TILE_POS_HEIGHT;
 
 	const uint32 boff = _w * (y + t) + x + l;
 	const uint32 soff = sw * t + l + 1;
 
-	const int cw = sw - r - l;
-	const int ch = sh - b - t;
+	const uint32 cw = sw - r - l;
+	const uint32 ch = sh - b - t;
 
-	uint32 *bptr = (uint32 *)(buffer->bits + boff);
-	uint32 *sptr = (uint32 *)(sprite       + soff);
+	uint32 *bptr = buffer->bits + boff;
+	uint32 *sptr = sprite       + soff;
 
-	for (uint8 oy = 0; oy < ch; ++oy) {
-		for (uint8 ox = 0; ox < cw; ++ox) {
+	for (uint32 oy = 0; oy < ch; ++oy) {
+		for (uint32 ox = 0; ox < cw; ++ox) {
 			const uint32 fore = *(sptr + ox);
 			const uint32 back = *(bptr + ox);
 			const uint32 mask = -(0 == (fore & 0x00ffffff));
@@ -452,7 +460,7 @@ void Game::update_bounds() {
 }
 
 void Game::update_anims() {
-	for (uint8 i = 0; i < anim_count; ++i) {
+	for (uint32 i = 0; i < anim_count; ++i) {
 		TileAnim ta = tanims[i];
 		Interval &inter = time.intervals[ta.anim_handle];
 
@@ -470,24 +478,24 @@ void Game::update_anims() {
 		*tile = info;
 
 		uint32 mapval;
-		uint16 tindex, oindex;
+		uint32 tindex, oindex;
 
-		uint16 ys = MAX(bounds.min.y, 0);
-		uint16 xs = MAX(bounds.min.x, 0);
-		uint16 ye = MIN(bounds.max.y, maph);
-		uint16 xe = MIN(bounds.max.x, mapw);
+		uint32 ys = MAX(bounds.min.y, 0);
+		uint32 xs = MAX(bounds.min.x, 0);
+		uint32 ye = MIN(bounds.max.y, maph);
+		uint32 xe = MIN(bounds.max.x, mapw);
 
-		uint16 total_tiles = (ye - ys + 1) * (xe - xs + 1);
-		uint16 total_dirt  = 0;
-		for (uint16 y = ys; y <= ye; ++y) {
-			uint16 moff = y * mapw;
-			for (uint16 x = xs; x <= xe; ++x) {
+		uint32 total_tiles = (ye - ys + 1) * (xe - xs + 1);
+		uint32 total_dirt  = 0;
+		for (uint32 y = ys; y <= ye; ++y) {
+			uint32 moff = y * mapw;
+			for (uint32 x = xs; x <= xe; ++x) {
 				mapval = map[moff + x];
 				tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 				oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
-
+				
 				if (tindex == ta.tile_index  || oindex == ta.tile_index) {
-					flag_dirt(x, y);
+					flag_dirt((uint16)x, (uint16)y);
 					++total_dirt;
 				}
 			}
@@ -497,24 +505,24 @@ void Game::update_anims() {
 }
 
 const void Game::render_map_all() {
-	int16 xs = 0, xe = max_tiles_x;
-	int16 ys = 0, ye = max_tiles_y;
+	int32 xs = 0, xe = max_tiles_x;
+	int32 ys = 0, ye = max_tiles_y;
 
-	int16 xpos1 = 0, xpos2 = 0;
-	int16 ypos1 = 0, ypos2 = 0;
-	int16 t = 0, b = 0;
-	int16 l = 0, r = 0;
+	int32 xpos1 = 0, xpos2 = 0;
+	int32 ypos1 = 0, ypos2 = 0;
+	int32 t = 0, b = 0;
+	int32 l = 0, r = 0;
 
-	const int16 posx = state.x - mid_tiles_x;
-	const int16 posy = state.y - mid_tiles_y;
+	const int32 posx = state.x - mid_tiles_x;
+	const int32 posy = state.y - mid_tiles_y;
 
-	int16 mapposx1 = posx;
-	int16 mapposy1 = posy;
-	int16 mapposx2 = posx + max_tiles_x;
-	int16 mapposy2 = posy + max_tiles_y;
+	int32 mapposx1 = posx;
+	int32 mapposy1 = posy;
+	int32 mapposx2 = posx + max_tiles_x;
+	int32 mapposy2 = posy + max_tiles_y;
 
 	if (interp.x) {
-		const int8 x = interp.x - TILE_X;
+		const int32 x = interp.x - TILE_X;
 		xpos1 = x;
 		xpos2 = x + max_px_x;
 		l = -x;
@@ -526,7 +534,7 @@ const void Game::render_map_all() {
 	}
 
 	if (interp.y) {
-		const int8 y = interp.y - TILE_Y;
+		const int32 y = interp.y - TILE_Y;
 		ypos1 = y;
 		ypos2 = y + max_px_y;
 		t = -y;
@@ -542,8 +550,8 @@ const void Game::render_map_all() {
 	const bool mapy1_inbounds = mapposy1 >= 0 && mapposy1 < (int)maph;
 	const bool mapy2_inbounds = mapposy2 >= 0 && mapposy2 < (int)maph;
 
-	const int16 moff1 = mapposy1 * maph;
-	const int16 moff2 = mapposy2 * maph;
+	const int32 moff1 = mapposy1 * mapw;
+	const int32 moff2 = mapposy2 * mapw;
 
 	if (ys <= -posy) { ys = -posy; }
 	if (ye <= -posy) { ye = -posy; }
@@ -556,9 +564,9 @@ const void Game::render_map_all() {
 	if (xe >= -posx + mapw) { xe = -posx + mapw; }
 
 	uint32 mapval;
-	uint16 tindex, oindex;
-	int16 xpos, ypos, moff;
-	int16 mapposx, mapposy;
+	uint32 tindex, oindex;
+	int32 xpos, ypos, moff;
+	int32 mapposx;
 
 	/*if (xs > bounds.min.x || xe < bounds.max.x || ys > bounds.min.y || ye < bounds.max.y) {
 		const uint32 y1 = (ys * TILE_Y) + interp.y;
@@ -594,8 +602,8 @@ const void Game::render_map_all() {
 		// left and right edges
 		if (interp.x) {
 			if (mapx1_inbounds) {
-				for (int16 y = ys; y < ye; ++y) {
-					moff = (y + posy) * maph;
+				for (int32 y = ys; y < ye; ++y) {
+					moff = (y + posy) * mapw;
 					mapval = map[moff + mapposx1];
 
 					ypos = (y * TILE_Y) + interp.y;
@@ -603,15 +611,15 @@ const void Game::render_map_all() {
 					tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 					oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
 					if (oindex) {
-						copy_to_buffer_clip_masked(tindex, oindex, xpos1, ypos, 0, l, 0, 0);
+						copy_to_buffer_clip_masked(tindex, oindex, xpos1, ypos, 0ul, l, 0ul, 0ul);
 					} else {
-						copy_to_buffer_clip(tindex, xpos1, ypos, 0, l, 0, 0);
+						copy_to_buffer_clip(tindex, xpos1, ypos, 0ul, l, 0ul, 0ul);
 					}
 				}
 			}
 			if (mapx2_inbounds) {
-				for (int16 y = ys; y < ye; ++y) {
-					moff = (y + posy) * maph;
+				for (int32 y = ys; y < ye; ++y) {
+					moff = (y + posy) * mapw;
 					mapval = map[moff + mapposx2];
 
 					ypos = (y * TILE_Y) + interp.y;
@@ -619,9 +627,9 @@ const void Game::render_map_all() {
 					tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 					oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
 					if (oindex) {
-						copy_to_buffer_clip_masked(tindex, oindex, xpos2, ypos, 0, 0, 0, r);
+						copy_to_buffer_clip_masked(tindex, oindex, xpos2, ypos, 0ul, 0ul, 0ul, r);
 					} else {
-						copy_to_buffer_clip(tindex, xpos2, ypos, 0, 0, 0, r);
+						copy_to_buffer_clip(tindex, xpos2, ypos, 0ul, 0ul, 0ul, r);
 					}
 				}
 			}
@@ -630,7 +638,7 @@ const void Game::render_map_all() {
 		// top and bottom edges
 		if (interp.y) {
 			if (mapy1_inbounds) {
-				for (int16 x = xs; x < xe; ++x) {
+				for (int32 x = xs; x < xe; ++x) {
 					mapposx = x + posx;
 					mapval = map[moff1 + mapposx];
 
@@ -639,15 +647,15 @@ const void Game::render_map_all() {
 					tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 					oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
 					if (oindex) {
-						copy_to_buffer_clip_masked(tindex, oindex, xpos, ypos1, t, 0, 0, 0);
+						copy_to_buffer_clip_masked(tindex, oindex, xpos, ypos1, t, 0ul, 0ul, 0ul);
 					} else {
-						copy_to_buffer_clip(tindex, xpos, ypos1, t, 0, 0, 0);
+						copy_to_buffer_clip(tindex, xpos, ypos1, t, 0ul, 0ul, 0ul);
 					}
 				}
 			}
 
 			if (mapy2_inbounds) {
-				for (int16 x = xs; x < xe; ++x) {
+				for (int32 x = xs; x < xe; ++x) {
 					mapposx = x + posx;
 					mapval = map[moff2 + mapposx];
 
@@ -656,9 +664,9 @@ const void Game::render_map_all() {
 					tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 					oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
 					if (oindex) {
-						copy_to_buffer_clip_masked(tindex, oindex, xpos, ypos2, 0, 0, b, 0);
+						copy_to_buffer_clip_masked(tindex, oindex, xpos, ypos2, 0ul, 0ul, b, 0ul);
 					} else {
-						copy_to_buffer_clip(tindex, xpos, ypos2, 0, 0, b, 0);
+						copy_to_buffer_clip(tindex, xpos, ypos2, 0ul, 0ul, b, 0ul);
 					}
 				}
 			}
@@ -672,9 +680,9 @@ const void Game::render_map_all() {
 				tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 				oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
 				if (oindex) {
-					copy_to_buffer_clip_masked(tindex, oindex, xpos1, ypos1, t, l, 0, 0);
+					copy_to_buffer_clip_masked(tindex, oindex, xpos1, ypos1, t, l, 0ul, 0ul);
 				} else {
-					copy_to_buffer_clip(tindex, xpos1, ypos1, t, l, 0, 0);
+					copy_to_buffer_clip(tindex, xpos1, ypos1, t, l, 0ul, 0ul);
 				}
 			}
 
@@ -684,9 +692,9 @@ const void Game::render_map_all() {
 				tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 				oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
 				if (oindex) {
-					copy_to_buffer_clip_masked(tindex, oindex, xpos2, ypos1, t, 0, 0, r);
+					copy_to_buffer_clip_masked(tindex, oindex, xpos2, ypos1, t, 0ul, 0ul, r);
 				} else {
-					copy_to_buffer_clip(tindex, xpos2, ypos1, t, 0, 0, r);
+					copy_to_buffer_clip(tindex, xpos2, ypos1, t, 0ul, 0ul, r);
 				}
 			}
 
@@ -696,9 +704,9 @@ const void Game::render_map_all() {
 				tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 				oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
 				if (oindex) {
-					copy_to_buffer_clip_masked(tindex, oindex, xpos1, ypos2, 0, l, b, 0);
+					copy_to_buffer_clip_masked(tindex, oindex, xpos1, ypos2, 0ul, l, b, 0ul);
 				} else {
-					copy_to_buffer_clip(tindex, xpos1, ypos2, 0, l, b, 0);
+					copy_to_buffer_clip(tindex, xpos1, ypos2, 0ul, l, b, 0ul);
 				}
 			}
 
@@ -708,20 +716,20 @@ const void Game::render_map_all() {
 				tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 				oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
 				if (oindex) {
-					copy_to_buffer_clip_masked(tindex, oindex, xpos2, ypos2, 0, 0, b, r);
+					copy_to_buffer_clip_masked(tindex, oindex, xpos2, ypos2, 0ul, 0ul, b, r);
 				} else {
-					copy_to_buffer_clip(tindex, xpos2, ypos2, 0, 0, b, r);
+					copy_to_buffer_clip(tindex, xpos2, ypos2, 0ul, 0ul, b, r);
 				}
 			}
 		}
 	}
 
 	// main area
-	for (int16 y = ys; y < ye; ++y) {
+	for (int32 y = ys; y < ye; ++y) {
 		ypos = (y * TILE_Y) + interp.y;
-		moff = (y + posy) * maph;
+		moff = (y + posy) * mapw;
 
-		for (int16 x = xs; x < xe; ++x) {
+		for (int32 x = xs; x < xe; ++x) {
 			xpos = (x * TILE_X) + interp.x;
 			mapval = map[moff + x + posx];
 
@@ -737,10 +745,10 @@ const void Game::render_map_all() {
 }
 
 const void Game::render_map_dirty() {
-	const int16 posx = state.x - mid_tiles_x;
-	const int16 posy = state.y - mid_tiles_y;
+	const int32 posx = state.x - mid_tiles_x;
+	const int32 posy = state.y - mid_tiles_y;
 
-	int16 t, b, l, r;
+	uint32 t, b, l, r;
 
 	if (interp.x) {
 		l = -interp.x + TILE_X;
@@ -759,19 +767,19 @@ const void Game::render_map_dirty() {
 	}
 
 	DirtyTile dt;
-	uint tindex, oindex;
-	int16 dx, dy;
+	uint32 tindex, oindex;
+	int32 dx, dy;
 	bool on_l, on_r, on_t, on_b;
-	int16 xpos, ypos;
+	int32 xpos, ypos;
 
-	for (uint16 i = 0; i < dirty_len; ++i) {
+	for (uint32 i = 0; i < dirty_len; ++i) {
 		dt = *(dirty_tiles + i);
 
 		tindex = (dt.tile & MAP_MASK_BACK) >> MAP_POS_BACK;
 		oindex = (dt.tile & MAP_MASK_FORE) >> MAP_POS_FORE;
 
-		dx = (int16)dt.pos.x;
-		dy = (int16)dt.pos.y;
+		dx = (int32)dt.pos.x;
+		dy = (int32)dt.pos.y;
 
 		on_l = dx < bounds.min.x || (dx == bounds.min.x && 0 != interp.x);
 		on_r = dx > bounds.max.x || (dx == bounds.max.x && 0 != interp.x);
@@ -782,10 +790,15 @@ const void Game::render_map_dirty() {
 		ypos = (dy - posy) * TILE_Y + interp.y;
 
 		if (on_t || on_b || on_r || on_l) {
+			const uint32 at = !on_b * t;
+			const uint32 ab = !on_t * b;
+			const uint32 al = !on_r * l;
+			const uint32 ar = !on_l * r;
+
 			if (oindex) {
-				copy_to_buffer_clip_masked(tindex, oindex, xpos, ypos, !on_b * t, !on_r * l, !on_t * b, !on_l * r);
+				copy_to_buffer_clip_masked(tindex, oindex, xpos, ypos, at, al, ab, ar);
 			} else {
-				copy_to_buffer_clip(tindex, xpos, ypos, !on_b * t, !on_r * l, !on_t * b, !on_l * r);
+				copy_to_buffer_clip(tindex, xpos, ypos, at, al, ab, ar);
 			}
 		} else {
 			if (oindex) {
@@ -804,7 +817,7 @@ const bool Game::render() {
 const bool Game::render_chars() {
 	const uint16 x = mid_tiles_x * TILE_X - 16;
 	const uint16 y = mid_tiles_y * TILE_Y - 32;
-	copy_to_buffer_masked((const uint32 **)cindices, 0ul, x, y);
+	copy_to_buffer_masked(cindices, 0ul, x, y);
 
 	return false;
 }
@@ -852,7 +865,7 @@ void Game::flag_dirt(const uint16 x, const uint16 y) {
 		|| (int16)y > bounds.max.y
 	) { return; }
 
-	const uint moff = y * maph;
+	const uint32 moff = y * mapw;
 
 	*(dirty_tiles + dirty_len) = { map[moff + x], { x, y } };
 

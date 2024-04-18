@@ -67,23 +67,22 @@ public:
 		return timeGetTime();
 	}
 
-	static inline uint64 start_timer(double &freq) {
-		LARGE_INTEGER lif, lic;
-		if (!QueryPerformanceFrequency(&lif)) { return NULL; }
+	static inline uint64 start_timer() {
+		LARGE_INTEGER li;
+		QueryPerformanceCounter(&li);
 		
-		QueryPerformanceCounter(&lic);
-		freq = double(lif.QuadPart) / 1000000.0;
-		
-		return lic.QuadPart;
+		return li.QuadPart;
 	}
 
-	static inline double stop_timer(uint64 start, double freq) {
+	static inline double stop_timer(uint64 start) {
 		LARGE_INTEGER li;
 		QueryPerformanceCounter(&li);
 
-		return double(li.QuadPart - start) / freq;
+		return double(li.QuadPart - start) * Win32::query_perf_freq;
 	}
 private:
+	static double query_perf_freq;
+
 	LRESULT CALLBACK _proc(HWND, uint, WPARAM, LPARAM);
 };
 
