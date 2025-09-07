@@ -98,6 +98,7 @@
 #define MAXTI_Y 15
 #define TILE_X 32
 #define TILE_Y 32
+#define TILE_XY 1024 // TILE_X * TILE_Y
 
 enum bound {
 	  TOP
@@ -118,7 +119,7 @@ struct TileAnim {
 	uint32 anim_handle;
 };
 
-struct DirtyTile {
+struct Tile {
 	uint32 tile;
 	Point2<uint16> pos;
 };
@@ -142,6 +143,7 @@ public:
 	const bool render_map();
 	const bool render_chars();
 	const void render_map_all();
+	const void render_map_all2();
 	const void render_map_dirty();
 
 	bool resize(const int, const int);
@@ -163,7 +165,7 @@ public:
 	void copy_to_buffer_alpha(const int, const int, const int, const int);
 	void copy_to_buffer_clip_alpha(const int, const int, const int, const int, const int, const int, const int, const int);
 
-	bool is_pressed(const ubyte, const bool);
+	bool is_pressed(const uint8 scancode, const bool turnoff);
 
 	void flag_dirt(const uint16 x, const uint16 y);
 
@@ -201,15 +203,18 @@ public:
 
 	uint16 _w;
 	uint16 _h;
+	uint32 stride;
 
 	Bounds<int16>  bounds = {};
 	Point2<uint16> state  = {};
 	Point2<int8>   interp = {};
 
-	DirtyTile* dirty_tiles;
-		
-	uint8 *dirty;
+	Tile  *dirty_tiles;
+	Tile *active_tiles;
 	uint16 dirty_len;
+
+	uint16 *dirty_frame_id;
+	uint16 current_frame_id;
 
 	bool *key_press;
 };

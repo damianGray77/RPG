@@ -3,6 +3,8 @@
 #define PCH_H
 
 #define WIN32_LEAN_AND_MEAN
+#define DEBUG_OUT
+
 
 enum ClipSide {
 	  top
@@ -19,6 +21,7 @@ enum ClipSide {
 #include <malloc.h>
 #include <memory.h>
 #include <tchar.h>
+#include <emmintrin.h>
 
 #include "Core.h"
 #include <assert.h>

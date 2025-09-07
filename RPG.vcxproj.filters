@@ -94,6 +94,7 @@
     <Image Include="Resources\tile0001.bmp" />
     <Image Include="Resources\tile0002.bmp" />
     <Image Include="Resources\tile0003.bmp" />
+    <Image Include="icon1.ico" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="RPG.rc">

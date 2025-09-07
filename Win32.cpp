@@ -2,7 +2,7 @@
 #include "Win32.h"
 #include <thread>
 
-Win32* Win32::self = NULL;
+Win32 *Win32::self = NULL;
 double Win32::query_perf_freq = 0;
 
 Win32::Win32() {
@@ -22,13 +22,11 @@ Win32::Win32() {
 
 	buffer_width  = 0;
 	buffer_height = 0;
-	window_width  = 0;
-	window_height = 0;
-	minmax = { };
+	minmax = {};
 
 	resize_move = false;
 
-	rect = { };
+	client_dims = {};
 	color_depth = 32;
 
 	fullscreen = true;
@@ -45,10 +43,17 @@ LRESULT CALLBACK Win32::proc(HWND window, uint msg, WPARAM wparam, LPARAM lparam
 }
 
 LRESULT CALLBACK Win32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM lparam) {
+	LRESULT ret = 0;
+
 	switch (msg) {
 		case WM_SIZE: {
-			uint16 w = LOWORD(lparam);
-			uint16 h = HIWORD(lparam);
+			client_dims = get_client_dimensions();
+
+			if (client_dims.width < buffer_width || client_dims.height < buffer_height) {
+				SetStretchBltMode(front_dc, HALFTONE);
+			} else {
+				SetStretchBltMode(front_dc, COLORONCOLOR);
+			}
 			
 			// TODO how to enforce the aspect ratio to limit the size of the window while dragging?
 			/*if (w > h) {
@@ -56,8 +61,6 @@ LRESULT CALLBACK Win32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM lpara
 			} else if(h > w) {
 				w = ceil<float>(h * buffer_width / (float)buffer_height);
 			}*/
-
-			resize(w, h);
 
 			break;
 		}
@@ -72,9 +75,12 @@ LRESULT CALLBACK Win32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM lpara
 
 			break;
 		}
-		// This prevents the flicker than will otherwise occur when resizing the window
 		case WM_PAINT: {
-			swap_buffers();
+			PAINTSTRUCT paint;
+
+			BeginPaint(window, &paint);
+			display_buffer();
+			EndPaint(window, &paint);
 
 			break;
 		}
@@ -101,23 +107,41 @@ LRESULT CALLBACK Win32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM lpara
 			sizemove();
 			break;
 		}
-		case WM_KEYDOWN: {
-			uint mapped = map_key(wparam);
-			key_press[mapped] = TRUE;
-			break;
-		}
+		case WM_SYSKEYDOWN:
+		case WM_SYSKEYUP:
+		case WM_KEYDOWN:
 		case WM_KEYUP: {
-			uint mapped = map_key(wparam);
-			key_press[mapped] = FALSE;
+			const bool was_pressed = 0 != (lparam & 0x40000000); // 30th bit
+			const bool  is_pressed = 0 == (lparam & 0x80000000); // 31st bit
+			if (was_pressed == is_pressed) { break; }
+
+			const uint8 mapped = map_key(wparam);
+			key_press[mapped] = is_pressed;
 			break;
 		}
+		case WM_CLOSE:
 		case WM_DESTROY: {
 			PostQuitMessage(0);
-			return 0;
+			break;
+		}
+		default: {
+			ret = DefWindowProcW(window, msg, wparam, lparam);
+			break;
 		}
 	}
 
-	return DefWindowProc(window, msg, wparam, lparam);
+	return ret;
+}
+
+ClientDimensions Win32::get_client_dimensions() {
+	RECT client_rect;
+	GetClientRect(window, &client_rect);
+
+	ClientDimensions ret;
+	ret.width  = client_rect.right  - client_rect.left;
+	ret.height = client_rect.bottom - client_rect.top;
+
+	return ret;
 }
 
 void Win32::sizemove() {
@@ -125,58 +149,58 @@ void Win32::sizemove() {
 	t.detach();
 }
 
-uint Win32::map_key(WPARAM wparam) {
+uint8 Win32::map_key(WPARAM wparam) {
 	switch(wparam) {
 		case VK_ESCAPE:     return 0x01;
-		case 0x31:          return 0x02;
-		case 0x32:          return 0x03;
-		case 0x33:          return 0x04;
-		case 0x34:          return 0x05;
-		case 0x35:          return 0x06;
-		case 0x36:          return 0x07;
-		case 0x37:          return 0x08;
-		case 0x38:          return 0x09;
-		case 0x39:          return 0x0A;
-		case 0x30:          return 0x0B;
+		case VK_1:          return 0x02;
+		case VK_2:          return 0x03;
+		case VK_3:          return 0x04;
+		case VK_4:          return 0x05;
+		case VK_5:          return 0x06;
+		case VK_6:          return 0x07;
+		case VK_7:          return 0x08;
+		case VK_8:          return 0x09;
+		case VK_9:          return 0x0A;
+		case VK_0:          return 0x0B;
 		case VK_OEM_MINUS:  return 0x0C;
 		case VK_OEM_PLUS:   return 0x0D;
 		case VK_OEM_5:      return 0x0E;
 		case VK_TAB:        return 0x0F;
-		case 0x51:          return 0x10;
-		case 0x57:          return 0x11;
-		case 0x45:          return 0x12;
-		case 0x52:          return 0x13;
-		case 0x54:          return 0x14;
-		case 0x59:          return 0x15;
-		case 0x55:          return 0x16;
-		case 0x49:          return 0x17;
-		case 0x4F:          return 0x18;
-		case 0x50:          return 0x19;
+		case VK_Q:          return 0x10;
+		case VK_W:          return 0x11;
+		case VK_E:          return 0x12;
+		case VK_R:          return 0x13;
+		case VK_T:          return 0x14;
+		case VK_Y:          return 0x15;
+		case VK_U:          return 0x16;
+		case VK_I:          return 0x17;
+		case VK_O:          return 0x18;
+		case VK_P:          return 0x19;
 		case VK_OEM_4:      return 0x1A;
 		case VK_OEM_6:      return 0x1B;
 		case VK_RETURN:     return 0x1C;
 		case VK_CONTROL:    return 0x1D;
-		case 0x41:          return 0x1E;
-		case 0x53:          return 0x1F;
-		case 0x44:          return 0x20;
-		case 0x46:          return 0x21;
-		case 0x47:          return 0x22;
-		case 0x48:          return 0x23;
-		case 0x4A:          return 0x24;
-		case 0x4B:          return 0x25;
-		case 0x4C:          return 0x26;
+		case VK_A:          return 0x1E;
+		case VK_S:          return 0x1F;
+		case VK_D:          return 0x20;
+		case VK_F:          return 0x21;
+		case VK_G:          return 0x22;
+		case VK_H:          return 0x23;
+		case VK_J:          return 0x24;
+		case VK_K:          return 0x25;
+		case VK_L:          return 0x26;
 		case VK_OEM_1:      return 0x27;
 		case VK_OEM_7:      return 0x28;
 		case VK_OEM_3:      return 0x29;
 		case VK_LSHIFT:     return 0x2A;
 		case VK_OEM_102:    return 0x2B;
-		case 0x5A:          return 0x2C;
-		case 0x58:          return 0x2D;
-		case 0x43:          return 0x2E;
-		case 0x56:          return 0x2F;
-		case 0x42:          return 0x30;
-		case 0x4E:          return 0x31;
-		case 0x4D:          return 0x32;
+		case VK_Z:          return 0x2C;
+		case VK_X:          return 0x2D;
+		case VK_C:          return 0x2E;
+		case VK_V:          return 0x2F;
+		case VK_B:          return 0x30;
+		case VK_N:          return 0x31;
+		case VK_M:          return 0x32;
 		case VK_OEM_COMMA:  return 0x33;
 		case VK_OEM_PERIOD: return 0x34;
 		case VK_OEM_2:      return 0x35;
@@ -218,17 +242,9 @@ uint Win32::map_key(WPARAM wparam) {
 	return 0;
 }
 
-bool Win32::init(const uint16 width, const uint16 height) {
-	buffer_width  = window_width  = width;
-	buffer_height = window_height = height;
-	rect.right  = window_width;
-	rect.bottom = window_height;
-
-	minmax = {};
-	minmax.min.x = width  / 2;
-	minmax.max.x = width  * 2;
-	minmax.min.y = height / 2;
-	minmax.max.y = height * 2;
+bool Win32::init(const uint32 width, const uint32 height) {
+	buffer_width  = width;
+	buffer_height = height;
 
 	timeBeginPeriod(1);
 
@@ -237,15 +253,12 @@ bool Win32::init(const uint16 width, const uint16 height) {
 		Win32::query_perf_freq = 1000000.0 / double(li.QuadPart);
 	}
 
-	HWND console = GetConsoleWindow();
-	ShowWindow(console, SW_SHOW); // SW_HIDE);
-
-	if (!init_window()) {
+	if (!init_window(width, height)) {
 		MessageBoxW(window, L"Cannot init window!", L"Error", MB_OK | MB_ICONERROR);
 		return false;
 	}
 
-	if (!init_buffer()) {
+	if (!init_buffer(width, height)) {
 		MessageBoxW(window, L"Cannot init buffer!", L"Error", MB_OK | MB_ICONERROR);
 		return false;
 	}
@@ -258,50 +271,91 @@ bool Win32::init(const uint16 width, const uint16 height) {
 		SetForegroundWindow(window);
 	}
 
-	GetClientRect(window, &rect);
-
 	return true;
 }
 
-bool Win32::init_window() {
+void Win32::show_console() {
+	HWND console = GetConsoleWindow();
+	HWND owner = GetWindow(console, GW_OWNER);
+
+	ShowWindow(NULL == owner
+		? console // Windows 10
+		: owner   // Windows 11
+	, SW_SHOW);
+}
+
+void Win32::hide_console() {
+	HWND console = GetConsoleWindow();
+	HWND owner = GetWindow(console, GW_OWNER);
+
+	ShowWindow(NULL == owner
+		? console // Windows 10
+		: owner   // Windows 11
+	, SW_HIDE);
+}
+
+bool Win32::init_window(const int32 width, const int32 height) {
 	instance = (HINSTANCE)GetModuleHandleW(NULL);
+	
+	WNDCLASSEXW wc = {};
+	wc.cbSize        = sizeof(WNDCLASSEX);
+	wc.style         = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+	wc.lpfnWndProc   = proc;
+	wc.hInstance     = instance;
+	wc.hCursor       = LoadCursorW(nullptr, IDC_ARROW);
+	wc.lpszClassName = cname;
 
-	WNDCLASSEXW wc = {
-		  sizeof(WNDCLASSEX)
-		, CS_HREDRAW | CS_VREDRAW | CS_OWNDC
-		, proc
-		, 0
-		, 0
-		, instance
-		, LoadIconW(instance, MAKEINTRESOURCE(IDI_RENDERER))
-		, LoadCursorW(nullptr, IDC_ARROW)
-		, (HBRUSH)(COLOR_WINDOW + 1)
-		, MAKEINTRESOURCEW(IDC_RENDERER)
-		, cname
-		, LoadIconW(instance, MAKEINTRESOURCE(IDI_SMALL))
-	};
+	if (!RegisterClassExW(&wc)) { return false; }
 
-	RegisterClassExW(&wc);
+	fullscreen = false; // IDYES == MessageBoxW(NULL, L"Click Yes to go to full screen (Recommended)", L"Options", MB_YESNO | MB_ICONQUESTION);
 
-	fullscreen = IDYES == MessageBoxW(NULL, L"Click Yes to go to full screen (Recommended)", L"Options", MB_YESNO | MB_ICONQUESTION);
+	RECT main_rect = { 0, 0, width,     height };
+	RECT  min_rect = { 0, 0, width / 2, height / 2 };
+	RECT  max_rect = { 0, 0, width * 2, height * 2 };
 
-	ulong style, style_ex;
+	uint32 style, style_ex;
 	if (fullscreen) {
-		style = WS_POPUP | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+		style    = WS_POPUP;
 		style_ex = 0;
 
 		if (!full_screen()) { return false; }
 
 		ShowCursor(false);
 	} else {
-		style = WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+		style    = WS_OVERLAPPEDWINDOW;
 		style_ex = WS_EX_CLIENTEDGE;
 
-		AdjustWindowRectEx(&rect, style, false, style_ex);
+		AdjustWindowRectEx(&main_rect, style, false, style_ex);
+		AdjustWindowRectEx( &min_rect, style, false, style_ex);
+		AdjustWindowRectEx( &max_rect, style, false, style_ex);
 	}
 
-	window = CreateWindowExW(style_ex, wc.lpszClassName, wname, style, CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, NULL, NULL, wc.hInstance, NULL);
+	minmax = {};
+	minmax.min.x = (uint16)(min_rect.right  - min_rect.left);
+	minmax.min.y = (uint16)(min_rect.bottom - min_rect.top );
+	minmax.max.x = (uint16)(max_rect.right  - max_rect.left);
+	minmax.max.y = (uint16)(max_rect.bottom - max_rect.top );
+
+	const uint32 window_width  = main_rect.right  - main_rect.left;
+	const uint32 window_height = main_rect.bottom - main_rect.top;
+
+	window = CreateWindowExW(
+		  style_ex
+		, wc.lpszClassName
+		, wname
+		, style
+		, CW_USEDEFAULT
+		, CW_USEDEFAULT
+		, window_width
+		, window_height
+		, NULL
+		, NULL
+		, wc.hInstance
+		, NULL
+	);
 	if (!window) { return false; }
+
+	client_dims = get_client_dimensions();
 
 	SYSTEM_INFO sysinfo;
 	GetSystemInfo(&sysinfo);
@@ -309,31 +363,28 @@ bool Win32::init_window() {
 
 	front_dc = GetDC(window);
 
-	memset(&info, 0, sizeof(info));
-
-	info.bmiHeader = {
-		  sizeof(BITMAPINFOHEADER)
-		,  (long)window_width
-		, -(long)window_height
-		, 1
-		, color_depth
-		, BI_RGB
-		, window_width * window_height * 4UL
-		, 0
-		, 0
-		, 0
-		, 0
-	};
+	info = {};
+	info.bmiHeader = {};
+	info.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+	info.bmiHeader.biPlanes      = 1;
+	info.bmiHeader.biBitCount    = color_depth;
+	info.bmiHeader.biCompression = BI_RGB;
 
 	return true;
 }
 
-bool Win32::init_buffer() {
-	info.bmiHeader.biWidth  =  (long)window_width;
-	info.bmiHeader.biHeight = -(long)window_height;
-	info.bmiHeader.biSizeImage = window_width * window_height * 4UL;
+bool Win32::init_buffer(const uint32 width, const uint32 height) {
+	info.bmiHeader.biWidth  =         width;
+	info.bmiHeader.biHeight = -(int32)height; // this is inverted to allow top-down per win32 documentation
 
-	dib = CreateDIBSection(front_dc, &info, DIB_RGB_COLORS, bits, NULL, 0);
+	dib = CreateDIBSection(
+		  front_dc
+		, &info
+		, DIB_RGB_COLORS
+		, bits
+		, NULL
+		, 0
+	);
 	if (NULL == dib) { return false; }
 
 	back_dc = CreateCompatibleDC(front_dc);
@@ -355,34 +406,35 @@ void Win32::unload() {
 	unload_buffer();
 
 	UnregisterClassW(cname, instance);
-
-	GetConsoleWindow();
 }
 
 void Win32::unload_buffer() {
-	if (NULL != back_dc) {
+	if (front_dc) {
+		ReleaseDC(window, front_dc);
+		front_dc = NULL;
+	}
+	if (back_dc) {
 		DeleteDC(back_dc);
 		back_dc = NULL;
 	}
 
-	if (NULL != dib) {
+	if (dib) {
 		DeleteObject(dib);
 		dib = NULL;
 	}
 }
 
 bool Win32::full_screen() {
-	DEVMODE settings;
-	memset(&settings, 0, sizeof(settings));
+	DEVMODEW settings = {};
 
 	if (!EnumDisplaySettingsW(NULL, ENUM_CURRENT_SETTINGS, &settings)) {
 		MessageBoxW(NULL, L"Could Not Enum Display Settings", L"Error", MB_OK);
 		return false;
 	}
 
-	settings.dmPelsWidth  = window_width;
-	settings.dmPelsHeight = window_height;
-	settings.dmColor = color_depth;
+	settings.dmPelsWidth  = client_dims.width;
+	settings.dmPelsHeight = client_dims.height;
+	settings.dmColor      = color_depth;
 
 	int result = ChangeDisplaySettingsW(&settings, CDS_FULLSCREEN);
 
@@ -394,12 +446,20 @@ bool Win32::full_screen() {
 	return true;
 }
 
-bool Win32::swap_buffers() {
-	if (window_width == buffer_width && window_height == buffer_height) {
-		return BitBlt(front_dc, 0, 0, buffer_width, buffer_height, back_dc, 0, 0, SRCCOPY);
+bool Win32::display_buffer() {
+	if(
+		   client_dims.width  == buffer_width
+		&& client_dims.height == buffer_height
+	) {
+		return BitBlt(front_dc
+			, 0, 0, buffer_width, buffer_height
+			, back_dc
+			, 0, 0
+			, SRCCOPY
+		);
 	} else {
 		return 0 == StretchDIBits(front_dc
-			, 0, 0, window_width, window_height
+			, 0, 0, client_dims.width, client_dims.height
 			, 0, 0, buffer_width, buffer_height
 			, *bits
 			, &info
@@ -409,22 +469,11 @@ bool Win32::swap_buffers() {
 	}
 }
 
-void Win32::resize(const uint16 w, const uint16 h) {
-	window_width  = w;
-	window_height = h;
-
-
-	GetWindowRect(window, &rect);
-}
-
 bool Win32::update() {
 	while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
 		if (WM_QUIT == msg.message) { return false; }
 
 		TranslateMessage(&msg);
-
-		if (WM_MOVE == msg.message) { printf("FAIL"); }
-
 		DispatchMessageW(&msg);
 	}
 

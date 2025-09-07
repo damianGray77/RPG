@@ -19,11 +19,17 @@ double frame_time = 0;
 bool async_frame = false;
 
 int main(int argc, char* argv[]) {
+#ifdef DEBUG_OUT
+	window.show_console();
+#else
+	window.hide_console();
+#endif
+
 	init();
 
 	game.buffer = &buffer;
 	game.key_press = window.key_press;
-	window.bits = (void**)(&buffer.bits);
+	window.bits = (void **)(&buffer.bits);
 	window    .draw_callback = draw;
 	window.sizemove_callback = sizemove;
 	Time::  _start_timer = Win32::start_timer;
@@ -113,12 +119,15 @@ void execute_frame() {
 		return;
 	}
 
+#ifdef DEBUG_OUT
 	const uint8 frame_handle = time.start_timer();
+#endif
 
 	game.update(fps->delta);
 
 	draw();
 
+#ifdef DEBUG_OUT
 	const double frame_elapsed = time.stop_timer(frame_handle);
 	frame_times[frames++] = ceil<uint16, double>(frame_elapsed);
 	frame_time += frame_elapsed;
@@ -132,6 +141,7 @@ void execute_frame() {
 		frame_time = 0;
 		frames     = 0;
 	}
+#endif
 }
 
 inline bool resize(int w, int h) {
@@ -144,6 +154,6 @@ inline bool resize(int w, int h) {
 
 inline void draw() {
 	if (game.render()) {
-		window.swap_buffers();
+		window.display_buffer();
 	}
 }
