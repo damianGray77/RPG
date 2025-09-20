@@ -43,8 +43,8 @@ bool RendererDX11::init_buffer(HWND window, void** bits, const uint32 width, con
 	back_buffer->Release();
 
 	D3D11_VIEWPORT viewport = {};
-	viewport.TopLeftX = 0;
-	viewport.TopLeftY = 0;
+	viewport.TopLeftX = 0.0f;
+	viewport.TopLeftY = 0.0f;
 	viewport.Width    = (float)width;
 	viewport.Height   = (float)height;
 	viewport.MinDepth = 0.0f;
