@@ -31,7 +31,7 @@ bool RendererGDI::display_buffer(const uint32 width, const uint32 height) {
 	}
 }
 
-void RendererGDI::set_display_mode(const uint32 width, const uint32 height) {
+bool RendererGDI::resize(const uint32 width, const uint32 height) {
 	const  int new_mode = (width < buffer_width || height < buffer_height) ? HALFTONE : COLORONCOLOR;
 	static int cur_mode = (width < buffer_width || height < buffer_height) ? HALFTONE : COLORONCOLOR;
 
@@ -39,6 +39,8 @@ void RendererGDI::set_display_mode(const uint32 width, const uint32 height) {
 		SetStretchBltMode(dc, new_mode);
 		cur_mode = new_mode;
 	}
+
+	return true;
 }
 
 void RendererGDI::unload_buffer() {

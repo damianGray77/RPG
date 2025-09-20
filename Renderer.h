@@ -7,10 +7,10 @@
 #include <windows.h>
 
 struct IRenderer {
-	bool (  *display_buffer_callback)(const void *self, const uint32 width, const uint32 height);
-	void (*set_display_mode_callback)(const void *self, const uint32 width, const uint32 height);
-	bool (     *init_buffer_callback)(const void *self, HWND window, void** bits, const uint32 width, const uint32 height);
-	void (   *unload_buffer_callback)(const void *self);
+	bool (*display_buffer_callback)(const void *self, const uint32 width, const uint32 height);
+	bool (        *resize_callback)(const void *self, const uint32 width, const uint32 height);
+	bool (   *init_buffer_callback)(const void *self, HWND window, void** bits, const uint32 width, const uint32 height);
+	void ( *unload_buffer_callback)(const void *self);
 
 	const void* self;
 
@@ -18,8 +18,8 @@ struct IRenderer {
 		return display_buffer_callback(self, width, height);
 	}
 
-	inline void set_display_mode(const uint32 width, const uint32 height) const {
-		set_display_mode_callback(self, width, height);
+	inline bool resize(const uint32 width, const uint32 height) const {
+		return resize_callback(self, width, height);
 	}
 
 	inline bool init_buffer(HWND window, void** bits, const uint32 width, const uint32 height) const {

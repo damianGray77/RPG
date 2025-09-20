@@ -45,7 +45,7 @@ LRESULT CALLBACK Win32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM lpara
 	switch (msg) {
 		case WM_SIZE: {
 			client_dims = get_client_dimensions();
-			renderer.set_display_mode(client_dims.width, client_dims.height);
+			renderer.resize(client_dims.width, client_dims.height);
 			
 			// TODO how to enforce the aspect ratio to limit the size of the window while dragging?
 			/*if (w > h) {
