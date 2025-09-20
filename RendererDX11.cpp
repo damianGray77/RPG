@@ -114,7 +114,7 @@ bool RendererDX11::display_buffer(const uint32 width, const uint32 height) {
 }
 
 bool RendererDX11::resize(const uint32 width, const uint32 height) {
-	if (0 == width || 0 == height) { return; }
+	if (0 == width || 0 == height) { return true; }
 
 	if (width < buffer_width || height < buffer_height) {
 		sampler_current = sampler_linear;

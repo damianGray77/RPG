@@ -32,6 +32,8 @@ bool RendererGDI::display_buffer(const uint32 width, const uint32 height) {
 }
 
 bool RendererGDI::resize(const uint32 width, const uint32 height) {
+	if (0 == width || 0 == height) { return true; }
+
 	const  int new_mode = (width < buffer_width || height < buffer_height) ? HALFTONE : COLORONCOLOR;
 	static int cur_mode = (width < buffer_width || height < buffer_height) ? HALFTONE : COLORONCOLOR;
 
