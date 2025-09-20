@@ -41,7 +41,7 @@ typedef unsigned int       uint;
 typedef unsigned short     ushort;
 typedef unsigned char      uchar;
 typedef unsigned char      ubyte;
-typedef char               byte;
+//typedef char               byte;
 
 template <class T>
 inline void SWAP(T* a, T* b) {

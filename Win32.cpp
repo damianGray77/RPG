@@ -9,12 +9,10 @@ Win32::Win32() {
 	self = this;
 
 	bits = NULL;
-	dib  = NULL;
-	info = {};
+
+	renderer = RendererDX11::create_renderer(new RendererDX11());
 
 	window   = NULL;
-	front_dc = NULL;
-	 back_dc = NULL;
 	instance = NULL;
 
 	    draw_callback = NULL;
@@ -27,7 +25,6 @@ Win32::Win32() {
 	resize_move = false;
 
 	client_dims = {};
-	color_depth = 32;
 
 	fullscreen = true;
 	cname = L"RPG";
@@ -48,12 +45,7 @@ LRESULT CALLBACK Win32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM lpara
 	switch (msg) {
 		case WM_SIZE: {
 			client_dims = get_client_dimensions();
-
-			if (client_dims.width < buffer_width || client_dims.height < buffer_height) {
-				SetStretchBltMode(front_dc, HALFTONE);
-			} else {
-				SetStretchBltMode(front_dc, COLORONCOLOR);
-			}
+			renderer.set_display_mode(client_dims.width, client_dims.height);
 			
 			// TODO how to enforce the aspect ratio to limit the size of the window while dragging?
 			/*if (w > h) {
@@ -258,7 +250,7 @@ bool Win32::init(const uint32 width, const uint32 height) {
 		return false;
 	}
 
-	if (!init_buffer(width, height)) {
+	if (!renderer.init_buffer(window, bits, width, height)) {
 		MessageBoxW(window, L"Cannot init buffer!", L"Error", MB_OK | MB_ICONERROR);
 		return false;
 	}
@@ -361,37 +353,6 @@ bool Win32::init_window(const int32 width, const int32 height) {
 	GetSystemInfo(&sysinfo);
 	cores = sysinfo.dwNumberOfProcessors;
 
-	front_dc = GetDC(window);
-
-	info = {};
-	info.bmiHeader = {};
-	info.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-	info.bmiHeader.biPlanes      = 1;
-	info.bmiHeader.biBitCount    = color_depth;
-	info.bmiHeader.biCompression = BI_RGB;
-
-	return true;
-}
-
-bool Win32::init_buffer(const uint32 width, const uint32 height) {
-	info.bmiHeader.biWidth  =         width;
-	info.bmiHeader.biHeight = -(int32)height; // this is inverted to allow top-down per win32 documentation
-
-	dib = CreateDIBSection(
-		  front_dc
-		, &info
-		, DIB_RGB_COLORS
-		, bits
-		, NULL
-		, 0
-	);
-	if (NULL == dib) { return false; }
-
-	back_dc = CreateCompatibleDC(front_dc);
-	if (NULL == back_dc) { return false; }
-
-	SelectObject(back_dc, dib);
-
 	return true;
 }
 
@@ -403,25 +364,9 @@ void Win32::unload() {
 		ShowCursor(true);
 	}
 
-	unload_buffer();
+	renderer.unload_buffer();
 
 	UnregisterClassW(cname, instance);
-}
-
-void Win32::unload_buffer() {
-	if (front_dc) {
-		ReleaseDC(window, front_dc);
-		front_dc = NULL;
-	}
-	if (back_dc) {
-		DeleteDC(back_dc);
-		back_dc = NULL;
-	}
-
-	if (dib) {
-		DeleteObject(dib);
-		dib = NULL;
-	}
 }
 
 bool Win32::full_screen() {
@@ -447,26 +392,7 @@ bool Win32::full_screen() {
 }
 
 bool Win32::display_buffer() {
-	if(
-		   client_dims.width  == buffer_width
-		&& client_dims.height == buffer_height
-	) {
-		return BitBlt(front_dc
-			, 0, 0, buffer_width, buffer_height
-			, back_dc
-			, 0, 0
-			, SRCCOPY
-		);
-	} else {
-		return 0 == StretchDIBits(front_dc
-			, 0, 0, client_dims.width, client_dims.height
-			, 0, 0, buffer_width, buffer_height
-			, *bits
-			, &info
-			, DIB_RGB_COLORS
-			, SRCCOPY
-		);
-	}
+	return renderer.display_buffer(client_dims.width, client_dims.height);
 }
 
 bool Win32::update() {

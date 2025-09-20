@@ -5,6 +5,8 @@
 void Time::init() {
 	uinterval_count = 0;
 	   utimer_count = 0;
+	
+	current_timer = 0;
 
 	ticks = _start_timer();
 }
@@ -17,23 +19,22 @@ void Time::update() {
 	}
 }
 
-const uint8 Time::start_timer() {
-	uint8 ret = 0; // find the first available (0-value) slot
-	while (timers[ret]) { ++ret; }
-	if (ret >= utimer_count) { utimer_count = ret + 1; }
+uint8 Time::start_timer() {
+	const uint8 index = current_timer++;
+	if (index >= utimer_count) { utimer_count = index + 1; }
 
-	timers[ret] = (float)_elapsed_timer(ticks);
+	timers[index] = (float)_elapsed_timer(ticks);
 
-	return ret;
+	return index;
 }
 
-const float Time::stop_timer(const uint8 handle) {
-	const float s = timers[handle];
-	const float e = (float)_elapsed_timer(ticks);
+float Time::stop_timer(const uint8 handle) {
+	const float start = timers[handle];
+	const float end = (float)_elapsed_timer(ticks);
 
-	timers[handle] = NULL;
+	timers[handle] = 0.0f;
 
-	return e - s;
+	return end - start;
 }
 
 /// <summary>
@@ -41,7 +42,7 @@ const float Time::stop_timer(const uint8 handle) {
 /// </summary>
 /// <param name="duration">Duration in millisections</param>
 /// <returns>A handle for the interval</returns>
-const uint8 Time::set_interval(const float duration) {
+uint8 Time::set_interval(const float duration) {
 	uint8 ret = 0; // find the first available (0-value) slot
 	while (intervals[ret].last) { ++ret; }
 	if (ret >= uinterval_count) { uinterval_count = ret + 1; }
@@ -53,10 +54,10 @@ const uint8 Time::set_interval(const float duration) {
 	return ret;
 }
 
-const void Time::clear_interval(const uint8 handle) {
+void Time::clear_interval(const uint8 handle) {
 	intervals[handle] = {};
 }
 
 // Empty functions. These will get overridden later by whatever OS timer functions are available.
-uint64 (*Time::  _start_timer)() {};
-double (*Time::_elapsed_timer)(uint64 start) {};
+uint64 (*Time::  _start_timer)() = NULL;
+double (*Time::_elapsed_timer)(uint64 start) = NULL;

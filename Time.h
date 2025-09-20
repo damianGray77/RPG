@@ -12,22 +12,25 @@ struct Interval {
 		const float diff = elapsed - last;
 		if (diff < dur) { return false; }
 
-		last = elapsed;
-		delta = diff / 1000.0f;
+		last  = elapsed;
+		delta = diff * 0.001f;
 
 		return true;
 	}
 };
 
 class Time {
+private:
 	uint8    utimer_count;
 	uint8 uinterval_count;
+	uint8 current_timer;
 
-	uint64 ticks;
 public:
 	bool  update_frame;
 	float delta;
-
+private:
+	uint64 ticks;
+public:
 	float       timers[256] = { };
 	Interval intervals[256] = { };
 
@@ -37,11 +40,11 @@ public:
 	void init();
 	void update();
 
-	const uint8 start_timer();
-	const float  stop_timer(const uint8);
+	uint8 start_timer();
+	float  stop_timer(const uint8);
 
-	const uint8  set_interval(const float duration);
-	const void clear_interval(const uint8 handle);
+	uint8  set_interval(const float duration);
+	void clear_interval(const uint8 handle);
 };
 
 #endif

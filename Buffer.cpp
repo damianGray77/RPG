@@ -1,30 +1,42 @@
 #include "pch.h"
 #include "Buffer.h"
 
-Buffer::Buffer() {
-	bits = NULL;
-
-	width  = 0;
-	height = 0;
-
-	mid_width  = 0;
-	mid_height = 0;
-	size = 0;
+Buffer create_buffer() {
+	Buffer buffer = {};
+	return buffer;
 }
 
-bool Buffer::init(const ulong w, const ulong h) {
-	width = w;
-	mid_width = (ulong)(w * 0.5f);
-	height = h;
-	mid_height = (ulong)(h * 0.5f);
-	size = w * h * sizeof(ulong);
+void configure_buffer(Buffer &buffer, const uint16 width, const uint16 height) {
+	buffer.width  = width;
+	buffer.height = height;
 
-	return true;
+	buffer.mid_width  = width  / 2;
+	buffer.mid_height = height / 2;
+
+	buffer.size = (uint32)width * (uint32)height;
 }
 
-void Buffer::unload() {
-	bits = NULL;
+void alloc_buffer(Buffer& buffer, const uint16 width, const uint16 height) {
+	configure_buffer(buffer, width, height);
 
-	width = 0;
-	height = 0;
+	buffer.bits = new uint32[buffer.width * buffer.height];
+}
+
+void fill_buffer(Buffer& buffer, const uint32 color) {
+	const uint32  len = buffer.size;
+	      uint32 *ptr = buffer.bits;
+
+	for (uint32 i = 0; i < len; ++i) {
+		ptr[i] = color;
+	}
+}
+
+void dealloc_buffer(Buffer& buffer) {
+	delete[](buffer.bits);
+
+	clear_buffer(buffer);
+}
+
+void clear_buffer(Buffer &buffer) {
+	buffer = {};
 }

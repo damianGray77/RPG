@@ -27,17 +27,20 @@ int main(int argc, char* argv[]) {
 
 	init();
 
+	alloc_buffer(buffer, RES_X, RES_Y);
+
 	game.buffer = &buffer;
 	game.key_press = window.key_press;
-	window.bits = (void **)(&buffer.bits);
+	window.bits = (void**)&buffer.bits;
 	window    .draw_callback = draw;
 	window.sizemove_callback = sizemove;
 	Time::  _start_timer = Win32::start_timer;
 	Time::_elapsed_timer = Win32:: stop_timer;
 
+	configure_buffer(buffer, RES_X, RES_Y);
+
 	if (
-		   game  .init()
-		&& buffer.init(RES_X, RES_Y)
+		   game.init()
 		&& game.resize(RES_X, RES_Y)
 		&& window.init(RES_X, RES_Y)
 	) {
@@ -52,7 +55,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	window.unload();
-	buffer.unload();
+	clear_buffer(buffer);
 	game.unload();
 
 	return 0;
@@ -71,10 +74,10 @@ void init_lookups() {
 		const float sin_val = (float)sin(val);
 		const float cos_val = (float)cos(val);
 
-		sins[i] = sin_val;
+		 sins[i] = sin_val;
 		isins[i] = 1.0f / sin_val;
 
-		coss[i] = cos_val;
+		 coss[i] = cos_val;
 		icoss[i] = 1.0f / cos_val;
 	}
 }
@@ -145,7 +148,7 @@ void execute_frame() {
 }
 
 inline bool resize(int w, int h) {
-	if (!buffer.init(w, h)) { return false; }
+	configure_buffer(buffer, w, h);
 	const bool res = game.resize(w, h);
 	draw();
 

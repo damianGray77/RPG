@@ -2,11 +2,16 @@
 #ifndef WINDOWS_H
 #define WINDOWS_H
 
+#define WIN32_LEAN_AND_MEAN
+
 #include <windows.h>
 #include <mmsystem.h>
 
 #include "resource.h"
 #include "Buffer.h"
+#include "Renderer.h"
+#include "RendererGDI.h"
+#include "RendererDX11.h"
 
 #define VK_0 0x30
 #define VK_1 0x31
@@ -55,12 +60,11 @@ class Win32 {
 public:
 	HWND window;
 	HINSTANCE instance;
-	HDC front_dc;
-	HDC back_dc;
-	HBITMAP dib;
+
 	void **bits;
 
-	BITMAPINFO info;
+	IRenderer renderer;
+
 	MSG msg;
 
 	ClientDimensions client_dims;
@@ -92,9 +96,7 @@ public:
 
 	bool  init(const uint32 width, const uint32 height);
 	bool  init_window(const int32 width, const int32 height);
-	bool  init_buffer(const uint32 width, const uint32 height);
 	void  unload();
-	void  unload_buffer();
 	bool  full_screen();
 	bool  display_buffer();
 	void  sizemove();
