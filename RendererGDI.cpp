@@ -2,11 +2,16 @@
 #include "RendererGDI.h"
 
 RendererGDI::RendererGDI() {
+	info   = {};
+	window = NULL;
+
 	bits = NULL;
 	dib  = NULL;
 	dc   = NULL;
 
-	color_depth = 32;
+	buffer_width  = 0;
+	buffer_height = 0;
+	color_depth   = 32;
 }
 
 bool RendererGDI::display_buffer(const uint32 width, const uint32 height) {
@@ -65,12 +70,12 @@ bool RendererGDI::init_buffer(HWND window, void **bits, const uint32 width, cons
 
 	info = {};
 	info.bmiHeader = {};
-	info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-	info.bmiHeader.biPlanes = 1;
-	info.bmiHeader.biBitCount = color_depth;
+	info.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+	info.bmiHeader.biPlanes      = 1;
+	info.bmiHeader.biBitCount    = color_depth;
 	info.bmiHeader.biCompression = BI_RGB;
-	info.bmiHeader.biWidth = width;
-	info.bmiHeader.biHeight = -(int32)height; // this is inverted to allow top-down per win32 documentation
+	info.bmiHeader.biWidth       = width;
+	info.bmiHeader.biHeight      = -(int32)height; // this is inverted to allow top-down per win32 documentation
 
 	dib = CreateDIBSection(dc, &info, DIB_RGB_COLORS, this->bits, NULL, 0);
 	if (NULL == dib) { return false; }

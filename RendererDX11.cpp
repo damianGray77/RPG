@@ -47,11 +47,11 @@ bool RendererDX11::init_buffer(HWND window, void** bits, const uint32 width, con
 	samp_desc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
 	samp_desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
 	hr = device->CreateSamplerState(&samp_desc, &sampler_linear);
-	if (FAILED(hr)) { return hr; }
+	if (FAILED(hr)) { return false; }
 
 	samp_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
 	hr = device->CreateSamplerState(&samp_desc, &sampler_point);
-	if (FAILED(hr)) { return hr; }
+	if (FAILED(hr)) { return false; }
 
 	D3D11_BUFFER_DESC bd = {};
 	bd.Usage     = D3D11_USAGE_DEFAULT;
@@ -92,16 +92,6 @@ bool RendererDX11::init_buffer(HWND window, void** bits, const uint32 width, con
 
 bool RendererDX11::display_buffer(const uint32 width, const uint32 height) {
 	context->UpdateSubresource(texture, 0, NULL, *bits, buffer_width * 4, 0);
-
-	uint stride = sizeof(Vertex3uv), offset = 0;
-	context->IASetVertexBuffers(0, 1, &vbuffer, &stride, &offset);
-	context->IASetInputLayout(layout);
-	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-
-	context->VSSetShader(vshader, NULL, 0);
-	context->PSSetShader(pshader, NULL, 0);
-	context->PSSetShaderResources(0, 1, &srv);
-	context->PSSetSamplers(0, 1, &sampler_current);
 
 	context->OMSetRenderTargets(1, &rtv, NULL);
 
@@ -181,6 +171,16 @@ HRESULT RendererDX11::init_viewport(const uint32 width, const uint32 height) {
 	viewport.MinDepth = 0.0f;
 	viewport.MaxDepth = 1.0f;
 	context->RSSetViewports(1, &viewport);
+
+	uint stride = sizeof(Vertex3uv), offset = 0;
+	context->IASetVertexBuffers(0, 1, &vbuffer, &stride, &offset);
+	context->IASetInputLayout(layout);
+	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+	context->VSSetShader(vshader, NULL, 0);
+	context->PSSetShader(pshader, NULL, 0);
+	context->PSSetShaderResources(0, 1, &srv);
+	context->PSSetSamplers(0, 1, &sampler_current);
 
 	return S_OK;
 }
