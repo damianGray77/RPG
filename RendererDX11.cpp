@@ -1,12 +1,40 @@
 #include "pch.h"
 #include "RendererDX11.h"
 
-bool RendererDX11::init_buffer(HWND window, void** bits, const uint32 width, const uint32 height) {
+RendererDX11::RendererDX11() {
+	window = NULL;
+	bits   = NULL;
+
+	buffer_width  = 0;
+	buffer_height = 0;
+	client_width  = 0;
+	client_height = 0;
+
+	device        = NULL;
+	context       = NULL;
+	swap_chain    = NULL;
+	rtv           = NULL;
+	texture       = NULL;
+	srv           = NULL;
+
+	sampler_current = NULL;
+	sampler_linear  = NULL;
+	sampler_point   = NULL;
+
+	vbuffer = NULL;
+	layout  = NULL;
+	vshader = NULL;
+	pshader = NULL;
+}
+
+bool RendererDX11::init(HWND window, void** bits, const uint32 width, const uint32 height) {
 	this->window = window;
 	this->bits   = bits;
 
 	buffer_width  = width;
 	buffer_height = height;
+	client_width  = width;
+	client_height = height;
 
 	HRESULT hr;
 
@@ -90,7 +118,7 @@ bool RendererDX11::init_buffer(HWND window, void** bits, const uint32 width, con
 	return true;
 }
 
-bool RendererDX11::display_buffer(const uint32 width, const uint32 height) {
+bool RendererDX11::draw() {
 	context->UpdateSubresource(texture, 0, NULL, *bits, buffer_width * 4, 0);
 
 	context->OMSetRenderTargets(1, &rtv, NULL);
@@ -105,6 +133,9 @@ bool RendererDX11::display_buffer(const uint32 width, const uint32 height) {
 
 bool RendererDX11::resize(const uint32 width, const uint32 height) {
 	if (0 == width || 0 == height) { return true; }
+
+	client_width  = width;
+	client_height = height;
 
 	if (width < buffer_width || height < buffer_height) {
 		sampler_current = sampler_linear;
@@ -185,7 +216,7 @@ HRESULT RendererDX11::init_viewport(const uint32 width, const uint32 height) {
 	return S_OK;
 }
 
-void RendererDX11::unload_buffer() {
+void RendererDX11::unload() {
 	if(device)         { device        ->Release(); device         = NULL; }
 	if(context)        { context       ->Release(); context        = NULL; }
 	if(swap_chain)     { swap_chain    ->Release(); swap_chain     = NULL; }

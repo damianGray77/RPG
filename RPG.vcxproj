@@ -22,7 +22,6 @@
     <ClInclude Include="Bitmap.h" />
     <ClInclude Include="Buffer.h" />
     <ClInclude Include="Core.h" />
-    <ClInclude Include="Renderer.h" />
     <ClInclude Include="RendererDX11.h" />
     <ClInclude Include="RendererGDI.h" />
     <ClInclude Include="Time.h" />
@@ -35,13 +34,12 @@
     <ClInclude Include="Vertex2.h" />
     <ClInclude Include="Vertex3.h" />
     <ClInclude Include="Vertex3uv.h" />
-    <ClInclude Include="Win32.h" />
+    <ClInclude Include="WindowWin32.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Bitmap.cpp" />
     <ClCompile Include="Buffer.cpp" />
     <ClCompile Include="Core.cpp" />
-    <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="RendererDX11.cpp" />
     <ClCompile Include="RendererGDI.cpp" />
     <ClCompile Include="Time.cpp" />
@@ -56,7 +54,7 @@
     <ClCompile Include="Vertex2.cpp" />
     <ClCompile Include="Vertex3.cpp" />
     <ClCompile Include="Vertex3uv.cpp" />
-    <ClCompile Include="Win32.cpp" />
+    <ClCompile Include="WindowWin32.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="icon1.ico" />

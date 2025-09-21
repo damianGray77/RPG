@@ -7,7 +7,10 @@
 
 Buffer buffer;
 Game game;
-Win32 window;
+
+WINDOW   *window;
+RENDERER *renderer;
+
 Time time;
 Interval *fps;
 
@@ -20,41 +23,46 @@ bool async_frame = false;
 
 int main(int argc, char* argv[]) {
 #ifdef DEBUG_OUT
-	window.show_console();
+	window->show_console();
 #else
-	window.hide_console();
+	window->hide_console();
 #endif
 
 	init();
 
 	alloc_buffer(buffer, RES_X, RES_Y);
 
-	game.buffer = &buffer;
-	game.key_press = window.key_press;
-	window.bits = (void**)&buffer.bits;
-	window    .draw_callback = draw;
-	window.sizemove_callback = sizemove;
-	Time::  _start_timer = Win32::start_timer;
-	Time::_elapsed_timer = Win32:: stop_timer;
+	window   = new WINDOW(draw, resize, sizemove);
+	renderer = new RENDERER();
+
+	window->app_name = APP_NAME;
+	game.buffer    = &buffer;
+	game.key_press = window->key_press;
+	Time::  _start_timer = WINDOW::start_timer;
+	Time::_elapsed_timer = WINDOW:: stop_timer;
 
 	configure_buffer(buffer, RES_X, RES_Y);
 
 	if (
 		   game.init()
 		&& game.resize(RES_X, RES_Y)
-		&& window.init(RES_X, RES_Y)
+		&& window->init(RES_X, RES_Y)
+		&& renderer->init(window->window, (void**)&buffer.bits, RES_X, RES_Y)
 	) {
 		time.init();
 
 		fps_handle = time.set_interval(1000.0f / (float)FPS_TARGET);
 		fps = &time.intervals[fps_handle];
 
+		window->show_window();
+
 		run();
 
 		time.clear_interval(fps_handle);
 	}
 
-	window.unload();
+	window->  unload();
+	renderer->unload();
 	clear_buffer(buffer);
 	game.unload();
 
@@ -86,21 +94,21 @@ void run() {
 	game.running = true;
 
 	do {
-		if (!window.update()) { break; }
+		if (!window->update()) { break; }
 
 		if (!async_frame) {
 			execute_frame();
 		}
 	} while (game.running);
 
-	window.close();
+	window->close();
 }
 
 void sizemove() {
 	const uint8 sm_handle = time.set_interval(100.0);
 	Interval &sm = time.intervals[sm_handle];
 
-	while (game.running && window.resize_move && !sm.update()) {
+	while (game.running && window->resize_move && !sm.update()) {
 		if (async_frame) {
 			Sleep(0);
 			continue;
@@ -147,9 +155,9 @@ void execute_frame() {
 #endif
 }
 
-inline bool resize(int w, int h) {
-	configure_buffer(buffer, w, h);
-	const bool res = game.resize(w, h);
+inline bool resize(const uint32 width, const uint32 height) {
+	configure_buffer(buffer, width, height);
+	const bool res = game.resize(width, height);
 	draw();
 
 	return res;
@@ -157,6 +165,6 @@ inline bool resize(int w, int h) {
 
 inline void draw() {
 	if (game.render()) {
-		window.display_buffer();
+		renderer->draw();
 	}
 }

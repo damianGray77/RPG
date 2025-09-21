@@ -26,7 +26,7 @@
     <ClInclude Include="Core.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Win32.h">
+    <ClInclude Include="WindowWin32.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
@@ -56,9 +56,6 @@
     <ClInclude Include="RendererDX11.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Renderer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Vertex3.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -76,7 +73,7 @@
     <ClCompile Include="Core.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Win32.cpp">
+    <ClCompile Include="WindowWin32.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Buffer.cpp">
@@ -98,9 +95,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="RendererDX11.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Renderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Vertex3.cpp">

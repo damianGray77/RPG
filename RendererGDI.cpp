@@ -11,22 +11,23 @@ RendererGDI::RendererGDI() {
 
 	buffer_width  = 0;
 	buffer_height = 0;
+	client_width  = 0;
+	client_height = 0;
 	color_depth   = 32;
 }
 
-bool RendererGDI::display_buffer(const uint32 width, const uint32 height) {
-	if (width == buffer_width && height == buffer_height) {
+bool RendererGDI::draw() {
+	if (client_width == buffer_width && client_height == buffer_height) {
 		return SetDIBitsToDevice(dc
-			, 0, 0, buffer_width, buffer_height
-			, 0, 0, 0, buffer_height
+			, 0, 0, client_width, client_height
+			, 0, 0, 0, client_height
 			, *bits
 			, &info
 			, DIB_RGB_COLORS
 		);
-	}
-	else {
+	} else {
 		return 0 == StretchDIBits(dc
-			, 0, 0, width, height
+			, 0, 0, client_width, client_height
 			, 0, 0, buffer_width, buffer_height
 			, *bits
 			, &info
@@ -47,10 +48,13 @@ bool RendererGDI::resize(const uint32 width, const uint32 height) {
 		cur_mode = new_mode;
 	}
 
+	client_width  = width;
+	client_height = height;
+
 	return true;
 }
 
-void RendererGDI::unload_buffer() {
+void RendererGDI::unload() {
 	if (dc) {
 		ReleaseDC(window, dc);
 		dc = NULL;
@@ -62,7 +66,7 @@ void RendererGDI::unload_buffer() {
 	}
 }
 
-bool RendererGDI::init_buffer(HWND window, void **bits, const uint32 width, const uint32 height) {
+bool RendererGDI::init(HWND window, void **bits, const uint32 width, const uint32 height) {
 	this->window = window;
 	this->bits   = bits;
 
@@ -84,6 +88,8 @@ bool RendererGDI::init_buffer(HWND window, void **bits, const uint32 width, cons
 
 	buffer_width  = width;
 	buffer_height = height;
+	client_width  = width;
+	client_height = height;
 
 	return true;
 }
