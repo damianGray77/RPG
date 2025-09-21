@@ -1,6 +1,6 @@
 A top down 2d RPG engine in the same vein as Final Fantasy 1-6.
 
-Written using GDI+ without DirectX / OpenGL / Vulkan / etc.
+Written using GDI+ and DirectX as two separate renderers. Currently no OpenGL / Metal / Vulkan support.
 
 Will support:
 * Animated tiles
