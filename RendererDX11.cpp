@@ -10,12 +10,12 @@ RendererDX11::RendererDX11() {
 	client_width  = 0;
 	client_height = 0;
 
-	device        = NULL;
-	context       = NULL;
-	swap_chain    = NULL;
-	rtv           = NULL;
-	texture       = NULL;
-	srv           = NULL;
+	device     = NULL;
+	context    = NULL;
+	swap_chain = NULL;
+	rtv        = NULL;
+	texture    = NULL;
+	srv        = NULL;
 
 	sampler_current = NULL;
 	sampler_linear  = NULL;

@@ -83,6 +83,8 @@ bool Game::init() {
 	state  = { 11, 7 };
 	interp = { 16, 0 };
 
+	move_rate = {};
+
 	time.init();
 
 	load();
@@ -102,10 +104,19 @@ void Game::load_map() {
 	maph = 20;
 	int mapwh = mapw * maph;
 	int i = mapwh;
+	int x, y;
 	while (--i >= 0) {
-		bool wall = 0;
+		x = i % mapw;
+		y = i / mapw;
+		bool wall = false;
 		uint back = 2;
 		uint fore = 0 == rand() % 17 ? 3 : 0 == rand() % 17 ? 4 : 0;
+
+		if (x == 0 || x == mapw - 1 || y == 0 || y == maph - 1) {
+			wall = true;
+			back = 0;
+			fore = 0;
+		}
 
 		map[i] =
 			  (ulong)(wall << MAP_POS_WALL)
@@ -369,7 +380,7 @@ void Game::copy_to_buffer_clip_masked(uint32** ibuf, const uint32 index, const i
 void Game::update(const float delta) {
 	time.update();
 
-	const uint16 unit = ceil<uint16, float>(delta * 100.0f);
+	const float unit = delta * 100.0f;
 
 	update_input(unit);
 
@@ -384,28 +395,62 @@ bool Game::is_pressed(const uint8 scancode, const bool turnoff) {
 	return true;
 }
 
-void Game::update_input(const uint16 unit) {
-	if(!paused) {
-		const bool kup    = key_press[K_UP]    && (state.y > 0    ||  0 != interp.y);
-		const bool kleft  = key_press[K_LEFT]  && (state.x > 0    ||  0 != interp.x);
-		const bool kdown  = key_press[K_DOWN]  && (state.y < maph || 31 != interp.y);
-		const bool kright = key_press[K_RIGHT] && (state.x < mapw || 31 != interp.x);
+inline float Game::update_speed(const bool key_pos, const bool key_neg, float rate) {
+	if (key_neg && key_pos) { return rate; }
+	
+	if (key_neg) {
+		rate = max(rate - (rate > 0.0f ? DECELRATE : ACCELRATE), -MAXSPEED);
+	} else if (key_pos) {
+		rate = min(rate + (rate < 0.0f ? DECELRATE : ACCELRATE),  MAXSPEED);
+	} else if (0 != rate) {
+		rate = rate > 0.0f
+			? max(rate - DECELRATE, 0.0f)
+			: min(rate + DECELRATE, 0.0f)
+		;
+	}
 
-		if (kup || kdown || kleft || kright) {
+	return rate;
+}
+
+void Game::update_input(const float unit) {
+	if(!paused) {
+		move_rate.y = update_speed(key_press[K_DOWN],  key_press[K_UP],   move_rate.y);
+		move_rate.x = update_speed(key_press[K_RIGHT], key_press[K_LEFT], move_rate.x);
+
+		const float y_amount = unit * move_rate.y;
+		const float x_amount = unit * move_rate.x;
+
+		int8 next_interpy = ceil<int8, float>(interp.y - y_amount);
+		int8 next_interpx = ceil<int8, float>(interp.x - x_amount);
+
+		const bool hit_bounds_top    = 1        == state.y && next_interpy >= TILE_Y - 1;
+		const bool hit_bounds_bottom = maph - 1 == state.y && next_interpy <= 0;
+		const bool hit_bounds_left   = 1        == state.x && next_interpx >= TILE_X - 1;
+		const bool hit_bounds_right  = mapw - 1 == state.x && next_interpx <= 0;
+
+		if (hit_bounds_top  || hit_bounds_bottom) { 
+			next_interpy = interp.y;
+			move_rate.y = 0.0f;
+		}
+		if (hit_bounds_left || hit_bounds_right)  { 
+			next_interpx = interp.x;
+			move_rate.x = 0.0f;
+		}
+
+		if(interp.y != next_interpy || interp.x != next_interpx) {
 			refresh = true;
 
-			if (kup)    { if(0    == state.y &&      0 != interp.y) { interp.y = 0;          } else { interp.y += unit; } }
-			if (kleft)  { if(0    == state.x &&      0 != interp.x) { interp.x = 0;          } else { interp.x += unit; } }
-			if (kdown)  { if(maph == state.y && TILE_Y != interp.y) { interp.y = TILE_Y - 1; } else { interp.y -= unit; } }
-			if (kright) { if(mapw == state.x && TILE_X != interp.x) { interp.x = TILE_X - 1; } else { interp.x -= unit; } }
+			if(interp.y != next_interpy) {
+				     if (next_interpy >= TILE_Y) { --state.y; interp.y = next_interpy - TILE_Y; }
+				else if (next_interpy < 0)       { ++state.y; interp.y = next_interpy + TILE_Y; }
+				else                             {            interp.y = next_interpy;          }
+			}
 
-			     if (interp.x >= TILE_X) { --state.x; }
-			else if (interp.x <       0) { ++state.x; }
-			     if (interp.y >= TILE_Y) { --state.y; }
-			else if (interp.y <       0) { ++state.y; }
-
-			interp.y &= (TILE_Y - 1);
-			interp.x &= (TILE_X - 1);
+			if(interp.x != next_interpx) {
+					 if (next_interpx >= TILE_X) { --state.x; interp.x = next_interpx - TILE_X; }
+				else if (next_interpx < 0)       { ++state.x; interp.x = next_interpx + TILE_X; }
+				else                             {            interp.x = next_interpx;          }
+			}
 
 			update_bounds();
 		}
@@ -817,8 +862,8 @@ const bool Game::render() {
 }
 
 const bool Game::render_chars() {
-	const uint16 x = mid_tiles_x * TILE_X - 16;
-	const uint16 y = mid_tiles_y * TILE_Y - 32;
+	const uint16 x = mid_tiles_x * TILE_X - SPRITE_X_OFFSET;
+	const uint16 y = mid_tiles_y * TILE_Y - SPRITE_Y_OFFSET;
 	copy_to_buffer_masked(cindices, 0ul, x, y);
 
 	return false;

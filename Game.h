@@ -96,6 +96,8 @@
 
 #define MAXTI_X 20
 #define MAXTI_Y 15
+#define SPRITE_X_OFFSET 0
+#define SPRITE_Y_OFFSET 48
 #define TILE_X 32
 #define TILE_Y 32
 #define TILE_XY 1024 // TILE_X * TILE_Y
@@ -147,7 +149,7 @@ public:
 	const void render_map_dirty();
 
 	bool resize(const int, const int);
-	void update_input(const uint16);
+	void update_input(const float unit);
 	void update_bounds();
 	void update_anims();
 
@@ -166,6 +168,7 @@ public:
 	//void copy_to_buffer_clip_alpha(const int, const int, const int, const int, const int, const int, const int, const int);
 
 	bool is_pressed(const uint8 scancode, const bool turnoff);
+	float update_speed(const bool positive, const bool negative, float current_rate);
 
 	void flag_dirt(const uint16 x, const uint16 y);
 
@@ -200,6 +203,11 @@ public:
 
 	uint16 mapw;
 	uint16 maph;
+
+	Point2<float> move_rate;
+#define ACCELRATE 0.1f
+#define DECELRATE 0.1f
+#define MAXSPEED  2.0f
 
 	uint16 _w;
 	uint16 _h;

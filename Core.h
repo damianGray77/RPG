@@ -71,6 +71,14 @@ template <typename T> inline T clamp(const T x, const T min, const T max) {
 	return x <= min ? min : x >= max ? max : x;
 };
 
+template <typename T> inline T min(const T x, const T y) {
+	return x <= y ? x : y;
+};
+
+template <typename T> inline T max(const T x, const T y) {
+	return x >= y ? x : y;
+};
+
 template <typename T> struct Bounds {
 	Point2<T> min;
 	Point2<T> max;
