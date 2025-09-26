@@ -4,8 +4,8 @@
 
 #define APP_NAME L"RPG"
 #define DEBUG_OUT
-#define RENDERER_GDI
-//#define RENDERER_DX11
+//#define RENDERER_GDI
+#define RENDERER_DX11
 //#define RENDERER_DX12
 //#define RENDERER_OPENGL
 //#define RENDERER_VULKAN

@@ -120,11 +120,10 @@ LRESULT CALLBACK WindowWin32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM
 		// thread for the duration of 100ms or until the event ends.
 		case WM_ENTERSIZEMOVE: {
 			// execute the callback immediately, otherwise there will be a 100ms delay.
-			resize_move = true;
 			sizemove();
 
 			SetTimer(window, NULL, 100u, NULL);
-			
+			resize_move = true;
 			break;
 		}
 		case WM_EXITSIZEMOVE: {

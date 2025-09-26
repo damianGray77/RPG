@@ -205,9 +205,9 @@ public:
 	uint16 maph;
 
 	Point2<float> move_rate;
-#define ACCELRATE 0.1f
-#define DECELRATE 0.1f
-#define MAXSPEED  2.0f
+	#define ACCELRATE 0.1f
+	#define DECELRATE 0.3f
+	#define MAXSPEED  2.0f
 
 	uint16 _w;
 	uint16 _h;

@@ -130,15 +130,15 @@ void execute_frame() {
 		return;
 	}
 
-/*#ifdef DEBUG_OUT
+#ifdef DEBUG_OUT
 	const uint8 frame_handle = time.start_timer();
-#endif*/
+#endif
 
 	game.update(fps->delta);
 
 	draw();
 
-/*#ifdef DEBUG_OUT
+#ifdef DEBUG_OUT
 	const double frame_elapsed = time.stop_timer(frame_handle);
 	frame_times[frames++] = ceil<uint16, double>(frame_elapsed);
 	frame_time += frame_elapsed;
@@ -152,11 +152,18 @@ void execute_frame() {
 		frame_time = 0;
 		frames     = 0;
 	}
-#endif*/
+#endif
 }
 
 inline bool resize(const uint32 width, const uint32 height) {
-	return renderer->resize(width, height);
+	draw();
+
+	const bool res =
+		   renderer->resize(width, height)
+		&& renderer->draw()
+	;
+
+	return res;
 }
 
 inline void draw() {
