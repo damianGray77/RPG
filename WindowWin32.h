@@ -56,6 +56,7 @@ public:
 
 	uint32 width;
 	uint32 height;
+	float  aspect_ratio;
 
 	LPCWSTR app_name;
 

@@ -80,8 +80,7 @@ bool Game::init() {
 	cindices = new uint32*[256];
 	tindices = new uint32*[256];
 
-	state  = { 11, 7 };
-	interp = { 16, 0 };
+	camera = { 0, 0 };
 
 	move_rate = {};
 
@@ -96,6 +95,7 @@ void Game::load() {
 	load_map();
 	load_tiles();
 	load_chars();
+	load_entites();
 	load_anims();
 }
 
@@ -169,6 +169,23 @@ void Game::load_tiles() {
 	}
 }
 
+void Game::load_entites() {
+	entities.init();
+
+	       player_id = 0;
+	uint8  player_size;
+	uint32 player_position;
+	uint8  player_velocity;
+	uint32 player_sprite;
+	
+	entity_set_size(player_size, 1, 2);
+	entity_set_position(player_position, 0, 0, 7, 11, 16, 0);
+	entity_set_velocity(player_velocity, 0, 0);
+	entity_set_sprite(player_sprite, 0, 0, 0, 0);
+	entities.add(player_id, player_size, player_position, player_velocity, player_sprite);
+	entities.activate(player_id);
+}
+
 void Game::load_chars() {
 	const char* files[1] = { "E:\\Projects\\RPG\\Resources\\char0001.bmp" };
 
@@ -187,9 +204,9 @@ void Game::load_anims() {
 
 		const float ms = (float)((info & TILE_MASK_SPEED) >> TILE_POS_SPEED);
 
-		const uint8 anim_handle = time.set_interval(ms);
+		const uint8 interval_handle = time.set_interval(ms);
 
-		tanims[anim_count++] = { i, anim_handle };
+		tanims[anim_count++] = { i, interval_handle };
 	}
 }
 
@@ -395,64 +412,80 @@ bool Game::is_pressed(const uint8 scancode, const bool turnoff) {
 	return true;
 }
 
-inline float Game::update_speed(const bool key_pos, const bool key_neg, float rate) {
-	if (key_neg && key_pos) { return rate; }
+inline void Game::update_speed(int8& rate, const bool key_pos, const bool key_neg) {
+	if (key_neg && key_pos) { return; }
 	
 	if (key_neg) {
-		rate = max(rate - (rate > 0.0f ? DECELRATE : ACCELRATE), -MAXSPEED);
+		rate = max(rate - (rate > 0 ? DECELRATE : ACCELRATE), -MAXSPEED);
 	} else if (key_pos) {
-		rate = min(rate + (rate < 0.0f ? DECELRATE : ACCELRATE),  MAXSPEED);
+		rate = min(rate + (rate < 0 ? DECELRATE : ACCELRATE),  MAXSPEED);
 	} else if (0 != rate) {
-		rate = rate > 0.0f
-			? max(rate - DECELRATE, 0.0f)
-			: min(rate + DECELRATE, 0.0f)
+		rate = rate > 0
+			? max(rate - DECELRATE, 0)
+			: min(rate + DECELRATE, 0)
 		;
 	}
-
-	return rate;
 }
 
 void Game::update_input(const float unit) {
 	if(!paused) {
-		move_rate.y = update_speed(key_press[K_DOWN],  key_press[K_UP],   move_rate.y);
-		move_rate.x = update_speed(key_press[K_RIGHT], key_press[K_LEFT], move_rate.x);
+		uint8 chunk_x, chunk_y;
+		uint8   pos_x,   pos_y;
+		uint8   sub_x,   sub_y;
+		int8    vel_x,   vel_y;
+		uint16 player_index = entities.copy_position_and_velocity(player_id, chunk_x, chunk_y, pos_x, pos_y, sub_x, sub_y, vel_x, vel_y);
 
-		const float y_amount = unit * move_rate.y;
-		const float x_amount = unit * move_rate.x;
+		const bool up    = is_pressed(K_UP,    false);
+		const bool down  = is_pressed(K_DOWN,  false);
+		const bool left  = is_pressed(K_LEFT,  false);
+		const bool right = is_pressed(K_RIGHT, false);
 
-		int8 next_interpy = ceil<int8, float>(interp.y - y_amount);
-		int8 next_interpx = ceil<int8, float>(interp.x - x_amount);
+		if(0 != vel_x || 0 != vel_y || up || down || left || right) {
+			update_speed(vel_y, down,  up);
+			update_speed(vel_x, right, left);
 
-		const bool hit_bounds_top    = 1        == state.y && next_interpy >= TILE_Y - 1;
-		const bool hit_bounds_bottom = maph - 1 == state.y && next_interpy <= 0;
-		const bool hit_bounds_left   = 1        == state.x && next_interpx >= TILE_X - 1;
-		const bool hit_bounds_right  = mapw - 1 == state.x && next_interpx <= 0;
+			const float scaled_unit = unit * 0.1333333333333333f; // 2/15th
+			const float y_amount = scaled_unit * vel_y;
+			const float x_amount = scaled_unit * vel_x;
 
-		if (hit_bounds_top  || hit_bounds_bottom) { 
-			next_interpy = interp.y;
-			move_rate.y = 0.0f;
-		}
-		if (hit_bounds_left || hit_bounds_right)  { 
-			next_interpx = interp.x;
-			move_rate.x = 0.0f;
-		}
+			int8 next_sub_y = ceil<int8, float>(sub_y - y_amount);
+			int8 next_sub_x = ceil<int8, float>(sub_x - x_amount);
 
-		if(interp.y != next_interpy || interp.x != next_interpx) {
-			refresh = true;
+			const bool hit_bounds_top    =        1 == pos_y && next_sub_y >= TILE_Y - 1;
+			const bool hit_bounds_bottom = maph - 1 == pos_y && next_sub_y <= 0;
+			const bool hit_bounds_left   =        1 == pos_x && next_sub_x >= TILE_X - 1;
+			const bool hit_bounds_right  = mapw - 1 == pos_x && next_sub_x <= 0;
 
-			if(interp.y != next_interpy) {
-				     if (next_interpy >= TILE_Y) { --state.y; interp.y = next_interpy - TILE_Y; }
-				else if (next_interpy < 0)       { ++state.y; interp.y = next_interpy + TILE_Y; }
-				else                             {            interp.y = next_interpy;          }
+			if (hit_bounds_top  || hit_bounds_bottom) { next_sub_y = sub_y; vel_y = 0; }
+			if (hit_bounds_left || hit_bounds_right)  { next_sub_x = sub_x; vel_x = 0; }
+
+			if(sub_y != next_sub_y || sub_x != next_sub_x) {
+				if(sub_y != next_sub_y) {
+						 if (next_sub_y >= TILE_Y) { --pos_y; sub_y = next_sub_y - TILE_Y; }
+					else if (next_sub_y < 0)       { ++pos_y; sub_y = next_sub_y + TILE_Y; }
+					else                           {          sub_y = next_sub_y;          }
+				}
+
+				if(sub_x != next_sub_x) {
+						 if (next_sub_x >= TILE_X) { --pos_x; sub_x = next_sub_x - TILE_X; }
+					else if (next_sub_x < 0)       { ++pos_x; sub_x = next_sub_x + TILE_X; }
+					else                           {          sub_x = next_sub_x;          }
+				}
 			}
 
-			if(interp.x != next_interpx) {
-					 if (next_interpx >= TILE_X) { --state.x; interp.x = next_interpx - TILE_X; }
-				else if (next_interpx < 0)       { ++state.x; interp.x = next_interpx + TILE_X; }
-				else                             {            interp.x = next_interpx;          }
-			}
+			// TODO: Clean this up, it is artefacty and the velocity is wrong in the down and right direction
+			flag_dirt(pos_x, pos_y);
+			flag_dirt(pos_x + 1, pos_y);
+			flag_dirt(pos_x - 1, pos_y);
+			flag_dirt(pos_x, pos_y - 1);
+			flag_dirt(pos_x + 1, pos_y - 1);
+			flag_dirt(pos_x - 1, pos_y - 1);
+			flag_dirt(pos_x, pos_y + 1);
+			flag_dirt(pos_x + 1, pos_y + 1);
+			flag_dirt(pos_x - 1, pos_y + 1);
 
-			update_bounds();
+			entity_set_position(entities.positions [player_index], chunk_x, chunk_y, pos_x, pos_y, sub_x, sub_y);
+			entity_set_velocity(entities.velocities[player_index], vel_x, vel_y);
 		}
 	}
 
@@ -467,13 +500,13 @@ void Game::update_input(const float unit) {
 }
 
 void Game::update_bounds() {
-	      int16 minx = (int16)state.x - mid_tiles_x;
-	      int16 miny = (int16)state.y - mid_tiles_y;
+	      int16 minx = camera.position_x;
+	      int16 miny = camera.position_y;
 	const int16 maxx = minx + max_tiles_x - 1;
 	const int16 maxy = miny + max_tiles_y - 1;
 
-	minx -= 0 != interp.x;
-	miny -= 0 != interp.y;
+	minx -= 0 != camera.subpos_x;
+	miny -= 0 != camera.subpos_y;
 
 	bounds.min.x = minx;
 	bounds.min.y = miny;
@@ -484,7 +517,7 @@ void Game::update_bounds() {
 void Game::update_anims() {
 	for (uint32 i = 0; i < anim_count; ++i) {
 		const TileAnim & ta    = tanims[i];
-		      Interval & inter = time.intervals[ta.anim_handle];
+		      Interval & inter = time.intervals[ta.interval_handle];
 
 		if (!inter.update()) { continue; }
 
@@ -556,32 +589,32 @@ const void Game::render_map_all() {
 	int32 t = 0, b = 0;
 	int32 l = 0, r = 0;
 
-	const int32 posx = state.x - mid_tiles_x;
-	const int32 posy = state.y - mid_tiles_y;
+	const int32 posx = camera.position_x;
+	const int32 posy = camera.position_y;
 
 	int32 mapposx1 = posx;
 	int32 mapposy1 = posy;
 	int32 mapposx2 = posx + max_tiles_x;
 	int32 mapposy2 = posy + max_tiles_y;
 
-	if (interp.x) {
-		const int32 x = interp.x - TILE_X;
+	if (camera.subpos_x) {
+		const int32 x = camera.subpos_x - TILE_X;
 		xpos1 = x;
 		xpos2 = x + max_px_x;
 		l = -x;
-		r = interp.x;
+		r = camera.subpos_x;
 
 		--xe;
 		--mapposx1;
 		--mapposx2;
 	}
 
-	if (interp.y) {
-		const int32 y = interp.y - TILE_Y;
+	if (camera.subpos_y) {
+		const int32 y = camera.subpos_y - TILE_Y;
 		ypos1 = y;
 		ypos2 = y + max_px_y;
 		t = -y;
-		b = interp.y;
+		b = camera.subpos_y;
 
 		--ye;
 		--mapposy1;
@@ -611,45 +644,15 @@ const void Game::render_map_all() {
 	int32 xpos, ypos, moff;
 	int32 mapposx;
 
-	/*if (xs > bounds.min.x || xe < bounds.max.x || ys > bounds.min.y || ye < bounds.max.y) {
-		const uint32 y1 = (ys * TILE_Y) + interp.y;
-		const uint32 y2 = (ye * TILE_Y) + interp.y;
-
-		if (ys > bounds.min.y) {
-			memset(buffer->bits, 0x00000000, (y1 * (uint32)_w) * sizeof(uint32));
-		}
-
-		if (ye < bounds.max.y) {
-			uint32* bptr = buffer->bits + y2 * (uint32)_w;
-			memset(bptr, 0x00000000, ((_h - y2) * (uint32)_w) * sizeof(uint32));
-		}
-
-		if (xs > bounds.min.x) {
-			const uint32 x = (xs * TILE_X) + interp.x;
-			for (uint32 y = y1; y < y2; ++y) {
-				uint32* bptr = buffer->bits + y * _w;
-				memset(bptr, 0x00000000, x * sizeof(uint32));
-			}
-		}
-
-		if (xe < bounds.max.x) {
-			const uint32 x = (xe * TILE_X) + interp.x;
-			for (uint32 y = y1; y < y2; ++y) {
-				uint32* bptr = buffer->bits + y * _w + x;
-				memset(bptr, 0x00000000, (_w - x) * sizeof(uint32));
-			}
-		}
-	}*/
-
-	if(interp.y || interp.x) {
+	if(camera.subpos_y || camera.subpos_x) {
 		// left and right edges
-		if (interp.x) {
+		if (camera.subpos_x) {
 			if (mapx1_inbounds) {
 				for (int32 y = ys; y < ye; ++y) {
 					moff = (y + posy) * mapw;
 					mapval = map[moff + mapposx1];
 
-					ypos = (y * TILE_Y) + interp.y;
+					ypos = (y * TILE_Y) + camera.subpos_y;
 
 					tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 					oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
@@ -665,7 +668,7 @@ const void Game::render_map_all() {
 					moff = (y + posy) * mapw;
 					mapval = map[moff + mapposx2];
 
-					ypos = (y * TILE_Y) + interp.y;
+					ypos = (y * TILE_Y) + camera.subpos_y;
 
 					tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 					oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
@@ -679,13 +682,13 @@ const void Game::render_map_all() {
 		}
 
 		// top and bottom edges
-		if (interp.y) {
+		if (camera.subpos_y) {
 			if (mapy1_inbounds) {
 				for (int32 x = xs; x < xe; ++x) {
 					mapposx = x + posx;
 					mapval = map[moff1 + mapposx];
 
-					xpos = (x * TILE_X) + interp.x;
+					xpos = (x * TILE_X) + camera.subpos_x;
 
 					tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 					oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
@@ -702,7 +705,7 @@ const void Game::render_map_all() {
 					mapposx = x + posx;
 					mapval = map[moff2 + mapposx];
 
-					xpos = (x * TILE_X) + interp.x;
+					xpos = (x * TILE_X) + camera.subpos_x;
 
 					tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 					oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
@@ -716,7 +719,7 @@ const void Game::render_map_all() {
 		}
 
 		// corners
-		if (interp.y && interp.x) {
+		if (camera.subpos_y && camera.subpos_x) {
 			if (mapy1_inbounds && mapx1_inbounds) {
 				mapval = map[moff1 + mapposx1];
 			
@@ -769,11 +772,11 @@ const void Game::render_map_all() {
 
 	// main area
 	for (int32 y = ys; y < ye; ++y) {
-		ypos = (y * TILE_Y) + interp.y;
+		ypos = (y * TILE_Y) + camera.subpos_y;
 		moff = (y + posy) * mapw;
 
 		for (int32 x = xs; x < xe; ++x) {
-			xpos = (x * TILE_X) + interp.x;
+			xpos = (x * TILE_X) + camera.subpos_x;
 			mapval = map[moff + x + posx];
 
 			tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
@@ -788,16 +791,16 @@ const void Game::render_map_all() {
 }
 
 const void Game::render_map_dirty() {
-	const int32 posx = state.x - mid_tiles_x;
-	const int32 posy = state.y - mid_tiles_y;
+	const int32 posx = camera.position_x;
+	const int32 posy = camera.position_y;
 
 	const int16 minx = bounds.min.x;
 	const int16 miny = bounds.min.y;
 	const int16 maxx = bounds.max.x;
 	const int16 maxy = bounds.max.y;
 
-	const int8 intx = interp.x;
-	const int8 inty = interp.y;
+	const int8 intx = camera.subpos_x;
+	const int8 inty = camera.subpos_y;
 
 	uint32 interp_top, interp_bottom, interp_left, interp_right;
 
@@ -856,15 +859,34 @@ const void Game::render_map_dirty() {
 }
 
 const bool Game::render() {
-	bool   map_rendered = render_map();
-	bool chars_rendered = render_chars();
-	return map_rendered || chars_rendered;
+	bool      map_rendered = render_map();
+	bool entities_rendered = render_entities();
+	return map_rendered || entities_rendered;
 }
 
-const bool Game::render_chars() {
-	const uint16 x = mid_tiles_x * TILE_X - SPRITE_X_OFFSET;
-	const uint16 y = mid_tiles_y * TILE_Y - SPRITE_Y_OFFSET;
-	copy_to_buffer_masked(cindices, 0ul, x, y);
+const bool Game::render_entities() {
+	const int8 camera_pos_x = camera.position_x;
+
+	for(int i = 0; i < entities.active; ++i) {
+		const uint32 position = entities.positions[i];
+		const uint16 position_x   = entity_get_position_x(position) - camera.position_x;
+		const uint16 position_y   = entity_get_position_y(position) - camera.position_y;
+
+		if (
+			   (int16)position_x < bounds.min.x
+			|| (int16)position_x > bounds.max.x
+			|| (int16)position_y < bounds.min.y
+			|| (int16)position_y > bounds.max.y
+		) { continue; }
+
+		const uint16 screen_x = position_x * TILE_X - entity_get_subpos_x(position) + camera.subpos_x;
+		const uint16 screen_y = position_y * TILE_Y - entity_get_subpos_y(position) + camera.subpos_y;
+
+		const uint32 sprite = entities.sprites[i];
+		const uint8  sprite_index = entity_get_sprite_index(sprite);
+
+		copy_to_buffer_masked(cindices, sprite_index, screen_x, screen_y);
+	}
 
 	return false;
 }
@@ -894,6 +916,7 @@ const bool Game::render_map() {
 bool Game::resize(const int w, const int h) {
 	_w = w;
 	_h = h;
+
 
 	max_tiles_x = floor<uint8, float>(_w / (float)TILE_X);
 	max_tiles_y = floor<uint8, float>(_h / (float)TILE_Y);

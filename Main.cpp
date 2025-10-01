@@ -156,8 +156,6 @@ void execute_frame() {
 }
 
 inline bool resize(const uint32 width, const uint32 height) {
-	draw();
-
 	const bool res =
 		   renderer->resize(width, height)
 		&& renderer->draw()

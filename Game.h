@@ -6,6 +6,7 @@
 #include "Point2.h"
 #include "Bitmap.h"
 #include "Time.h"
+#include "Entity.h"
 
 #define K_ESCAPE       0x01
 #define K_1            0x02
@@ -118,7 +119,7 @@ enum tile_type : uint32 {
 
 struct TileAnim {
 	uint8  tile_index;
-	uint32 anim_handle;
+	uint32 interval_handle;
 };
 
 struct Tile {
@@ -135,6 +136,7 @@ public:
 	void load();
 	void load_map();
 	void load_tiles();
+	void load_entites();
 	void load_chars();
 	void load_anims();
 
@@ -143,7 +145,7 @@ public:
 	void update(const float);
 	const bool render();
 	const bool render_map();
-	const bool render_chars();
+	const bool render_entities();
 	const void render_map_all();
 	const void render_map_all2();
 	const void render_map_dirty();
@@ -168,7 +170,7 @@ public:
 	//void copy_to_buffer_clip_alpha(const int, const int, const int, const int, const int, const int, const int, const int);
 
 	bool is_pressed(const uint8 scancode, const bool turnoff);
-	float update_speed(const bool positive, const bool negative, float current_rate);
+	void update_speed(int8& rate, const bool key_pos, const bool key_neg);
 
 	void flag_dirt(const uint16 x, const uint16 y);
 
@@ -177,6 +179,10 @@ public:
 	bool running;
 	bool paused;
 	bool refresh;
+
+	Entities entities;
+	Camera   camera;
+	uint16   player_id;
 
 	uint8 max_tiles_x;
 	uint8 max_tiles_y;
@@ -205,17 +211,15 @@ public:
 	uint16 maph;
 
 	Point2<float> move_rate;
-	#define ACCELRATE 0.1f
-	#define DECELRATE 0.3f
-	#define MAXSPEED  2.0f
+	#define ACCELRATE 1
+	#define DECELRATE 2
+	#define MAXSPEED  7
 
 	uint16 _w;
 	uint16 _h;
 	uint32 stride;
 
 	Bounds<int16>  bounds = {};
-	Point2<uint16> state  = {};
-	Point2<int8>   interp = {};
 
 	Tile  *dirty_tiles;
 	Tile *active_tiles;
@@ -225,6 +229,7 @@ public:
 	uint16 current_frame_id;
 
 	bool *key_press;
+	bool key_pressed;
 };
 
 #endif

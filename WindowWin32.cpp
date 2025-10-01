@@ -18,6 +18,7 @@ WindowWin32::WindowWin32(
 	cores       = 0;
 	width  = 0;
 	height = 0;
+	aspect_ratio = 0.0f;
 
 	minmax = {};
 	msg    = {};
@@ -79,16 +80,86 @@ LRESULT CALLBACK WindowWin32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM
 	LRESULT ret = 0;
 
 	switch (msg) {
+		// Handle window resizing to maintain aspect ratio
+		case WM_SIZING: {
+			const uint32 style    = GetWindowLong(window, GWL_STYLE);
+			const uint32 style_ex = GetWindowLong(window, GWL_EXSTYLE);
+
+			RECT* win_rect = (RECT*)lparam;
+
+			const uint32 win_width  = win_rect->right  - win_rect->left;
+			const uint32 win_height = win_rect->bottom - win_rect->top;
+
+			// Add the window borders and header to the size
+			RECT adjusted_rect = { 0, 0, win_width, win_height };
+			AdjustWindowRectEx(&adjusted_rect, style, false, style_ex);
+
+			// Calculate the client area size by removing the borders and header
+			uint32 client_width  = win_width  - (adjusted_rect.right  - adjusted_rect.left - win_width);
+			uint32 client_height = win_height - (adjusted_rect.bottom - adjusted_rect.top  - win_height);
+
+			float current_aspect = client_width / (float)client_height;
+
+			// Adjust the client area size to maintain the aspect ratio
+			switch (wparam) {
+				case WMSZ_TOP:
+				case WMSZ_BOTTOM: {
+					client_width = (uint32)(client_height * aspect_ratio);
+					break;
+				}
+				case WMSZ_LEFT:
+				case WMSZ_RIGHT: {
+					client_height = (uint32)(client_width / aspect_ratio);
+					break;
+				}
+				default: {
+					if (current_aspect <= aspect_ratio) {
+						client_width  = (uint32)(client_height * aspect_ratio);
+					} else {
+						client_height = (uint32)(client_width  / aspect_ratio);
+					}
+					break;
+				}
+			}
+
+			// Recalculate the window size based on the new client area size
+			adjusted_rect.bottom = adjusted_rect.top  + client_height;
+			adjusted_rect.right  = adjusted_rect.left + client_width;
+			AdjustWindowRectEx(&adjusted_rect, style, false, style_ex);
+
+			const uint32 new_win_width  = adjusted_rect.right  - adjusted_rect.left;
+			const uint32 new_win_height = adjusted_rect.bottom - adjusted_rect.top;
+
+			// Update the window rectangle based on which edge/corner is being dragged
+			switch (wparam) {
+				case WMSZ_TOPLEFT:
+				case WMSZ_BOTTOMLEFT:
+					win_rect->left = win_rect->right - new_win_width;
+					break;
+				case WMSZ_TOPRIGHT:
+				case WMSZ_BOTTOMRIGHT:
+				default:
+					win_rect->right = win_rect->left + new_win_width;
+					break;
+			}
+
+			switch (wparam) {
+				case WMSZ_TOPLEFT:
+				case WMSZ_TOPRIGHT:
+					win_rect->top = win_rect->bottom - new_win_height;
+					break;
+				case WMSZ_BOTTOMLEFT:
+				case WMSZ_BOTTOMRIGHT:
+				default:
+					win_rect->bottom = win_rect->top + new_win_height;
+					break;
+			}
+
+			break;
+		}
 		case WM_SIZE: {
 			update_client_size();
 			resize_callback(width, height);
-
-			// TODO how to enforce the aspect ratio to limit the size of the window while dragging?
-			/*if (w > h) {
-				h = ceil<float>(w * buffer_height / (float)buffer_width);
-			} else if(h > w) {
-				w = ceil<float>(h * buffer_width / (float)buffer_height);
-			}*/
 
 			break;
 		}
@@ -191,11 +262,15 @@ void WindowWin32::sizemove() {
 }
 
 bool WindowWin32::update() {
-	while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
-		if (WM_QUIT == msg.message) { return false; }
+	DWORD wait = MsgWaitForMultipleObjectsEx(0, NULL, 1, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 
-		TranslateMessage(&msg);
-		DispatchMessageW(&msg);
+	if (WAIT_OBJECT_0 == wait) {
+		while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+			if (WM_QUIT == msg.message) { return false; }
+
+			TranslateMessage(&msg);
+			DispatchMessageW(&msg);
+		}
 	}
 
 	return true;
@@ -244,6 +319,8 @@ bool WindowWin32::init_window(const uint32 width, const uint32 height) {
 	RECT main_rect = { 0, 0, width,     height };
 	RECT  min_rect = { 0, 0, width / 2, height / 2 };
 	RECT  max_rect = { 0, 0, width * 2, height * 2 };
+
+	aspect_ratio = width / (float)height;
 
 	uint32 style, style_ex;
 	if (fullscreen) {

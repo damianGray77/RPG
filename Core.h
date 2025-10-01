@@ -79,6 +79,12 @@ template <typename T> inline T max(const T x, const T y) {
 	return x >= y ? x : y;
 };
 
+template <typename T> inline void swap(T& x, T& y) {
+	T t = y;
+	y = x;
+	x = t;
+};
+
 template <typename T> struct Bounds {
 	Point2<T> min;
 	Point2<T> max;
