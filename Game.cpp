@@ -1038,28 +1038,31 @@ const void Game::render_map_dirty() {
 
 const bool Game::render() {
 	bool      map_rendered = render_map();
-	bool entities_rendered = render_entities();
+	bool entities_rendered = render_entities(map_rendered);
 	return map_rendered || entities_rendered;
 }
 
-const bool Game::render_entities() {
+const bool Game::render_entities(const bool map_rendered) {
 	bool rendered = false;
 
 	for(int i = 0; i < entities.active; ++i) {
-		// skip if entity hasn't moved and no dirty tiles underneath
+		// skip if entity hasn't moved and map wasn't redrawn underneath
+		// zero velocity packs to 0x88: ((0+8)<<4)|(0+8)
 		const uint8 vel = entities.velocities[i];
-		if (0 == vel && !refresh && dirty_len == 0) { continue; }
+		if (0x88 == vel && !map_rendered) { continue; }
 
 		const uint32 position = entities.positions[i];
 		const int16 position_x = (int16)(entity_get_position_x(position) - camera.position_x);
 		const int16 position_y = (int16)(entity_get_position_y(position) - camera.position_y);
 
 		// coarse tile-level cull (camera-relative coordinates)
+		// position_y is feet; head is size_h tiles above, so allow extra room at the bottom
+		const uint8 size_h = entity_get_size_height(entities.sizes[i]);
 		if (
 			   position_x < -1
 			|| position_x > max_tiles_x
 			|| position_y < -1
-			|| position_y > max_tiles_y
+			|| position_y > max_tiles_y + (int16)size_h - 1
 		) { continue; }
 
 		const uint32 sprite = entities.sprites[i];

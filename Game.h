@@ -145,7 +145,7 @@ public:
 	void update(const float);
 	const bool render();
 	const bool render_map();
-	const bool render_entities();
+	const bool render_entities(const bool map_rendered);
 	const void render_map_all();
 	const void render_map_all2();
 	const void render_map_dirty();
