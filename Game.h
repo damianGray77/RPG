@@ -154,6 +154,9 @@ public:
 	void update_input(const float unit);
 	void update_bounds();
 	void update_anims();
+	void update_camera(const float delta);
+	void update_dirty();
+	void rebuild_anim_cells();
 
 	void unload();
 
@@ -172,7 +175,9 @@ public:
 	bool is_pressed(const uint8 scancode, const bool turnoff);
 	void update_speed(int8& rate, const bool key_pos, const bool key_neg);
 
-	void flag_dirt(const uint16 x, const uint16 y);
+	void flag_dirt(const int16 x, const int16 y);
+	void reset_dirty_px_bounds();
+	void expand_dirty_px_bounds(int32 x, int32 y, int32 w, int32 h);
 
 	Time time;
 
@@ -202,6 +207,11 @@ public:
 	uint32 **cindices;
 	uint32 **tindices;
 	TileAnim tanims[256] = {};
+	uint8 tile_frames[256] = {};
+
+	uint16 *anim_cells;
+	uint16  anim_cell_start[256];
+	uint16  anim_cell_count[256];
 
 	uint8 char_count;
 	uint8 tile_count;
@@ -215,11 +225,12 @@ public:
 	#define DECELRATE 2
 	#define MAXSPEED  7
 
-	uint16 _w;
+	uint16 _w;	
 	uint16 _h;
 	uint32 stride;
 
 	Bounds<int16>  bounds = {};
+	Bounds<int32>  dirty_px_bounds = {};
 
 	Tile  *dirty_tiles;
 	Tile *active_tiles;

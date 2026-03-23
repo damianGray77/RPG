@@ -36,6 +36,7 @@
     <ClInclude Include="Vertex3.h" />
     <ClInclude Include="Vertex3uv.h" />
     <ClInclude Include="WindowWin32.h" />
+    <ClInclude Include="Thread.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Bitmap.cpp" />
@@ -57,6 +58,7 @@
     <ClCompile Include="Vertex3.cpp" />
     <ClCompile Include="Vertex3uv.cpp" />
     <ClCompile Include="WindowWin32.cpp" />
+    <ClCompile Include="Thread.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="icon1.ico" />
@@ -207,6 +209,7 @@
       <ConformanceMode>true</ConformanceMode>
       <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
       <FloatingPointModel>Fast</FloatingPointModel>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <AdditionalOptions>/Qpar-report:2 /Qvec-report:2 %(AdditionalOptions)</AdditionalOptions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
     </ClCompile>

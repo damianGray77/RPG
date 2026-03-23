@@ -12,8 +12,8 @@ struct Interval {
 		const float diff = elapsed - last;
 		if (diff < dur) { return false; }
 
-		last  = elapsed;
-		delta = diff * 0.001f;
+		last += dur;
+		delta = dur * 0.001f;
 
 		return true;
 	}

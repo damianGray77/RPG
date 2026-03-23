@@ -2,6 +2,8 @@
 #ifndef ENTITY_H
 #define ENTITY_H
 
+#include "Tween.h"
+
 #define MAX_ENTITIES 256
 #define MAX_IDS      65536
 
@@ -106,8 +108,8 @@ struct Camera {
 	uint8 chunk_x;
 	uint8 chunk_y;
 
-	uint8 position_x;
-	uint8 position_y;
+	int16 position_x;
+	int16 position_y;
 
 	uint8 subpos_x;
 	uint8 subpos_y;
@@ -116,6 +118,10 @@ struct Camera {
 	int8 velocity_y;
 
 	uint8 locked_to_entity_id;
+	bool  locked_to_entity;
+
+	Tween tween_x;
+	Tween tween_y;
 };
 
 typedef struct Entities Entities;
@@ -226,6 +232,20 @@ struct Entities {
 		vel_y   = entity_get_velocity_y(velocity);
 
 		return i;
+	}
+
+	inline void lock_camera(const uint16 id, Camera& camera) {
+		int16 i = indices[id];
+		if (-1 == i) { return; } // not found
+
+		const uint32 position = positions[i];
+
+		camera   .chunk_x = entity_get_chunk_x   (position);
+		camera   .chunk_y = entity_get_chunk_y   (position);
+		camera.position_x = entity_get_position_x(position);
+		camera.position_y = entity_get_position_y(position);
+		camera  .subpos_x = entity_get_subpos_x  (position);
+		camera  .subpos_y = entity_get_subpos_y  (position);
 	}
 };
 

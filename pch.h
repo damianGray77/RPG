@@ -51,7 +51,7 @@ enum ClipSide {
 #include <malloc.h>
 #include <memory.h>
 #include <tchar.h>
-#include <emmintrin.h>
+#include <immintrin.h>
 
 #include "Core.h"
 #include <assert.h>

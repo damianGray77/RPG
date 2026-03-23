@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "Main.h"
+#include "Thread.h"
 
 #define RES_X 640
 #define RES_Y 480
@@ -8,8 +9,9 @@
 Buffer buffer;
 Game   game;
 
-WINDOW   *window;
-RENDERER *renderer;
+WINDOW     *window;
+RENDERER   *renderer;
+ThreadPool  threads;
 
 Time time;
 Interval *fps;
@@ -19,7 +21,6 @@ uint8 fps_handle;
 uint8 frames = 0;
 uint16 frame_times[FPS_TARGET] = {};
 double frame_time = 0;
-bool async_frame = false;
 
 int main(int argc, char* argv[]) {
 #ifdef DEBUG_OUT
@@ -47,7 +48,8 @@ int main(int argc, char* argv[]) {
 		   game.init()
 		&& game.resize(RES_X, RES_Y)
 		&& window->init(RES_X, RES_Y)
-		&& renderer->init(window->window, (void**)&buffer.bits, RES_X, RES_Y)
+		&& threads.init(window, ThreadPool::MAX_WORKERS)
+		&& renderer->init(window->window, &threads, (void**)&buffer.bits, RES_X, RES_Y)
 	) {
 		time.init();
 
@@ -61,6 +63,7 @@ int main(int argc, char* argv[]) {
 		time.clear_interval(fps_handle);
 	}
 
+	threads.shutdown();
 	window->  unload();
 	renderer->unload();
 	clear_buffer(buffer);
@@ -96,39 +99,20 @@ void run() {
 	do {
 		if (!window->update()) { break; }
 
-		if (!async_frame) {
-			execute_frame();
-		}
+		execute_frame();
 	} while (game.running);
 
 	window->close();
 }
 
 void sizemove() {
-	const uint8 sm_handle = time.set_interval(100.0);
-	Interval &sm = time.intervals[sm_handle];
-
-	while (game.running && window->resize_move && !sm.update()) {
-		if (async_frame) {
-			Sleep(0);
-			continue;
-		}
-		
-		async_frame = true;
-		execute_frame();
-		async_frame = false;
-	}
-
-	time.clear_interval(sm_handle);
+	execute_frame();
 }
 
 void execute_frame() {
 	time.update();
 
-	if (!fps->update()) {
-		Sleep(1);
-		return;
-	}
+	if (!fps->update()) { return; }
 
 #ifdef DEBUG_OUT
 	const uint8 frame_handle = time.start_timer();
@@ -143,11 +127,13 @@ void execute_frame() {
 	frame_times[frames++] = ceil<uint16, double>(frame_elapsed);
 	frame_time += frame_elapsed;
 	if (frames == FPS_TARGET) {
-		printf("Avg Frame Time: %.2f\xE6s (%d", frame_time / frames, frame_times[0]);
+		char buf[512];
+		int len = sprintf_s(buf, sizeof(buf), "Avg Frame Time: %.2f\xE6s (%d", frame_time / frames, frame_times[0]);
 		for (uint8 i = 1; i < frames; ++i) {
-			printf(" %d", frame_times[i]);
+			len += sprintf_s(buf + len, sizeof(buf) - len, " %d", frame_times[i]);
 		}
-		printf(")\r\n");
+		len += sprintf_s(buf + len, sizeof(buf) - len, ")\r\n");
+		fwrite(buf, 1, len, stdout);
 
 		frame_time = 0;
 		frames     = 0;
@@ -156,16 +142,20 @@ void execute_frame() {
 }
 
 inline bool resize(const uint32 width, const uint32 height) {
-	const bool res =
-		   renderer->resize(width, height)
-		&& renderer->draw()
-	;
+	if (!renderer->resize(width, height)) { return false; }
 
-	return res;
+	if (window->resize_move) {
+		game.refresh = true;
+	} else {
+		renderer->draw();
+	}
+
+	return true;
 }
 
 inline void draw() {
 	if (game.render()) {
-		renderer->draw();
+		const Bounds<int32>& b = game.dirty_px_bounds;
+		renderer->draw(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y);
 	}
 }

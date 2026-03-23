@@ -56,11 +56,12 @@ Game::Game() {
 	paused  = false;
 	refresh = false;
 
-	map      = NULL;
-	tiles    = NULL;
-	chars    = NULL;
-	tindices = NULL;
-	cindices = NULL;
+	map        = NULL;
+	tiles      = NULL;
+	chars      = NULL;
+	tindices   = NULL;
+	cindices   = NULL;
+	anim_cells = NULL;
 
 	buffer    = NULL;
 	key_press = NULL;
@@ -111,12 +112,6 @@ void Game::load_map() {
 		bool wall = false;
 		uint back = 2;
 		uint fore = 0 == rand() % 17 ? 3 : 0 == rand() % 17 ? 4 : 0;
-
-		if (x == 0 || x == mapw - 1 || y == 0 || y == maph - 1) {
-			wall = true;
-			back = 0;
-			fore = 0;
-		}
 
 		map[i] =
 			  (ulong)(wall << MAP_POS_WALL)
@@ -179,7 +174,7 @@ void Game::load_entites() {
 	uint32 player_sprite;
 	
 	entity_set_size(player_size, 1, 2);
-	entity_set_position(player_position, 0, 0, 7, 11, 16, 0);
+	entity_set_position(player_position, 0, 0, 7, 12, 16, 0); // pos_y = feet tile
 	entity_set_velocity(player_velocity, 0, 0);
 	entity_set_sprite(player_sprite, 0, 0, 0, 0);
 	entities.add(player_id, player_size, player_position, player_velocity, player_sprite);
@@ -208,13 +203,67 @@ void Game::load_anims() {
 
 		tanims[anim_count++] = { i, interval_handle };
 	}
+
+	rebuild_anim_cells();
+}
+
+void Game::rebuild_anim_cells() {
+	if (anim_cells) { free(anim_cells); anim_cells = NULL; }
+	if (0 == anim_count) { return; }
+
+	memset(anim_cell_count, 0, sizeof(anim_cell_count));
+	memset(anim_cell_start, 0, sizeof(anim_cell_start));
+
+	const uint32 map_size = mapw * maph;
+
+	// pass 1: count cells per animated tile type
+	for (uint32 c = 0; c < map_size; ++c) {
+		const uint32 mapval = map[c];
+		const uint16 back = (uint16)((mapval & MAP_MASK_BACK) >> MAP_POS_BACK);
+		const uint16 fore = (uint16)((mapval & MAP_MASK_FORE) >> MAP_POS_FORE);
+
+		for (uint8 a = 0; a < anim_count; ++a) {
+			const uint8 ti = tanims[a].tile_index;
+			if (back == ti || fore == ti) {
+				++anim_cell_count[ti];
+			}
+		}
+	}
+
+	// prefix sum for start offsets
+	uint16 offset = 0;
+	for (uint8 a = 0; a < anim_count; ++a) {
+		const uint8 ti = tanims[a].tile_index;
+		anim_cell_start[ti] = offset;
+		offset += anim_cell_count[ti];
+		anim_cell_count[ti] = 0;
+	}
+
+	if (0 == offset) { return; }
+
+	anim_cells = (uint16*)malloc(offset * sizeof(uint16));
+
+	// pass 2: fill cell indices
+	for (uint32 c = 0; c < map_size; ++c) {
+		const uint32 mapval = map[c];
+		const uint16 back = (uint16)((mapval & MAP_MASK_BACK) >> MAP_POS_BACK);
+		const uint16 fore = (uint16)((mapval & MAP_MASK_FORE) >> MAP_POS_FORE);
+
+		for (uint8 a = 0; a < anim_count; ++a) {
+			const uint8 ti = tanims[a].tile_index;
+			if (back == ti || fore == ti) {
+				anim_cells[anim_cell_start[ti] + anim_cell_count[ti]] = (uint16)c;
+				++anim_cell_count[ti];
+			}
+		}
+	}
 }
 
 uint32 Game::load_tile(uint32 *tbuf, uint32 **tibuf, const char *file, const tile_type type, const uint16 i, const uint32 start) {
-	Bitmap* tile = new Bitmap(file);
+	Bitmap tile(file);
 
-	const uint8 w = tile->w;
-	const uint8 h = tile->h;
+	const uint8 w = tile.w;
+	const uint8 h = tile.h;
 
 	const uint16 len = w * h;
 
@@ -231,10 +280,7 @@ uint32 Game::load_tile(uint32 *tbuf, uint32 **tibuf, const char *file, const til
 		+ ((uint32)w       << TILE_POS_WIDTH )
 		+ ((uint32)h       << TILE_POS_HEIGHT)
 	;
-	memcpy(tibuf[i] + 1, tile->data, sizeof(uint32) * len);
-
-	tile->unload();
-	tile = NULL;
+	memcpy(tibuf[i] + 1, tile.data, sizeof(uint32) * len);
 
 	return end;
 }
@@ -245,10 +291,8 @@ uint32 Game::load_tile(uint32 *tbuf, uint32 **tibuf, const char *file, const til
 void Game::copy_to_buffer(const uint32 index, const uint32 x, const uint32 y) {
 	const uint32 * tile = tindices[index];
 
-	const uint32 sprite_index = (*tile & TILE_MASK_INDEX) >> TILE_POS_INDEX;
-
 	      uint32 * __restrict buffer_ptr = buffer->bits + (stride * y + x);
-	const uint32 * __restrict   tile_ptr = tile + 1 + (TILE_XY * sprite_index);
+	const uint32 * __restrict   tile_ptr = tile + 1 + (TILE_XY * tile_frames[index]);
 	const size_t row_bytes = sizeof(*buffer_ptr) * TILE_X;
 
 	for (uint32 row = 0; row < TILE_Y; ++row) {
@@ -265,13 +309,11 @@ void Game::copy_to_buffer(const uint32 index, const uint32 x, const uint32 y) {
 void Game::copy_to_buffer_clip(const uint32 index, const int32 x, const int32 y, const uint32 clip_top, const uint32 clip_left, const uint32 clip_bottom, const uint32 clip_right) {
 	const uint32 * tile = tindices[index];
 
-	const uint32 sprite_index = (*tile & TILE_MASK_INDEX) >> TILE_POS_INDEX;
-
 	const uint32 clipped_width  = TILE_X - clip_right  - clip_left;
 	const uint32 clipped_height = TILE_Y - clip_bottom - clip_top;
 
 	      uint32 * __restrict buffer_ptr = buffer->bits + stride * (y + clip_top) + x + clip_left;
-	const uint32 * __restrict   tile_ptr = tile + 1 + TILE_XY * sprite_index + TILE_X * clip_top + clip_left;
+	const uint32 * __restrict   tile_ptr = tile + 1 + TILE_XY * tile_frames[index] + TILE_X * clip_top + clip_left;
 	const size_t row_bytes = sizeof(*buffer_ptr) * clipped_width;
 
 	for (uint32 row = 0; row < clipped_height; ++row) {
@@ -290,16 +332,21 @@ void Game::copy_to_buffer_masked(const uint32 background_index, const uint32 ove
 	const uint32 *    overlay_tile = tindices[   overlay_index];
 
 	      uint32 * __restrict     buffer_ptr = buffer->bits + stride * y + x;
-	const uint32 * __restrict background_ptr = background_tile + 1;
-	const uint32 * __restrict    overlay_ptr =    overlay_tile + 1;
+	const uint32 * __restrict background_ptr = background_tile + 1 + (TILE_XY * tile_frames[background_index]);
+	const uint32 * __restrict    overlay_ptr =    overlay_tile + 1 + (TILE_XY * tile_frames[   overlay_index]);
+
+	const __m128i zero     = _mm_setzero_si128();
+	const __m128i rgb_mask = _mm_set1_epi32(0x00ffffff);
 
 	for (uint32 row = 0; row < TILE_Y; ++row) {
-		for (uint32 col = 0; col < TILE_X; ++col) {
-			const uint32 fore =    overlay_ptr[col];
-			const uint32 back = background_ptr[col];
-			const uint32 mask = -!(fore & 0x00ffffff);
+		for (uint32 col = 0; col < TILE_X; col += 4) {
+			const __m128i fore = _mm_loadu_si128((const __m128i*)(overlay_ptr    + col));
+			const __m128i back = _mm_loadu_si128((const __m128i*)(background_ptr + col));
+			const __m128i mask = _mm_cmpeq_epi32(_mm_and_si128(fore, rgb_mask), zero);
 
-			buffer_ptr[col] = (back & mask) | (fore & ~mask);
+			_mm_storeu_si128((__m128i*)(buffer_ptr + col),
+				_mm_or_si128(_mm_and_si128(back, mask), _mm_andnot_si128(mask, fore))
+			);
 		}
 
 		    buffer_ptr += stride;
@@ -315,21 +362,35 @@ void Game::copy_to_buffer_clip_masked(const uint32 tindex, const uint32 oindex, 
 	const uint32 * background_tile = tindices[tindex];
 	const uint32 *    overlay_tile = tindices[oindex];
 
-	const uint32 tile_offset = TILE_X * clip_top + clip_left + 1;
+	const uint32 clip_offset = TILE_X * clip_top + clip_left;
 
 	const uint32 clipped_width  = TILE_X - clip_right  - clip_left;
 	const uint32 clipped_height = TILE_Y - clip_bottom - clip_top;
 
 	      uint32 * __restrict     buffer_ptr = buffer->bits + stride * (y + clip_top) + x + clip_left;
-	const uint32 * __restrict background_ptr = background_tile + tile_offset;
-	const uint32 * __restrict    overlay_ptr =    overlay_tile + tile_offset;
+	const uint32 * __restrict background_ptr = background_tile + 1 + TILE_XY * tile_frames[tindex] + clip_offset;
+	const uint32 * __restrict    overlay_ptr =    overlay_tile + 1 + TILE_XY * tile_frames[oindex] + clip_offset;
+
+	const __m128i zero     = _mm_setzero_si128();
+	const __m128i rgb_mask = _mm_set1_epi32(0x00ffffff);
+
+	const uint32 simd_width = clipped_width & ~3u;
 
 	for (uint32 row = 0; row < clipped_height; ++row) {
-		for (uint32 col = 0; col < clipped_width; ++col) {
+		uint32 col = 0;
+		for (; col < simd_width; col += 4) {
+			const __m128i fore = _mm_loadu_si128((const __m128i*)(overlay_ptr    + col));
+			const __m128i back = _mm_loadu_si128((const __m128i*)(background_ptr + col));
+			const __m128i mask = _mm_cmpeq_epi32(_mm_and_si128(fore, rgb_mask), zero);
+
+			_mm_storeu_si128((__m128i*)(buffer_ptr + col),
+				_mm_or_si128(_mm_and_si128(back, mask), _mm_andnot_si128(mask, fore))
+			);
+		}
+		for (; col < clipped_width; ++col) {
 			const uint32 fore =    overlay_ptr[col];
 			const uint32 back = background_ptr[col];
 			const uint32 mask = -!(fore & 0x00ffffff);
-
 			buffer_ptr[col] = (back & mask) | (fore & ~mask);
 		}
 
@@ -344,19 +405,33 @@ void Game::copy_to_buffer_clip_masked(const uint32 tindex, const uint32 oindex, 
 /// </summary>
 void Game::copy_to_buffer_masked(uint32 **ibuf, const uint32 index, const uint32 x, const uint32 y) {
 	uint32 * sprite = ibuf[index];
-	
+
 	const uint32 sprite_width  = (*sprite & TILE_MASK_WIDTH)  >> TILE_POS_WIDTH;
 	const uint32 sprite_height = (*sprite & TILE_MASK_HEIGHT) >> TILE_POS_HEIGHT;
 
 	      uint32 * __restrict buffer_ptr = buffer->bits + stride * y + x;
 	const uint32 * __restrict sprite_ptr = sprite + 1;
 
+	const __m128i zero     = _mm_setzero_si128();
+	const __m128i rgb_mask = _mm_set1_epi32(0x00ffffff);
+
+	const uint32 simd_width = sprite_width & ~3u;
+
 	for (uint32 row = 0; row < sprite_height; ++row) {
-		for (uint32 col = 0; col < sprite_width; ++col) {
+		uint32 col = 0;
+		for (; col < simd_width; col += 4) {
+			const __m128i fore = _mm_loadu_si128((const __m128i*)(sprite_ptr + col));
+			const __m128i back = _mm_loadu_si128((const __m128i*)(buffer_ptr + col));
+			const __m128i mask = _mm_cmpeq_epi32(_mm_and_si128(fore, rgb_mask), zero);
+
+			_mm_storeu_si128((__m128i*)(buffer_ptr + col),
+				_mm_or_si128(_mm_and_si128(back, mask), _mm_andnot_si128(mask, fore))
+			);
+		}
+		for (; col < sprite_width; ++col) {
 			const uint32 fore = sprite_ptr[col];
 			const uint32 back = buffer_ptr[col];
 			const uint32 mask = -!(fore & 0x00ffffff);
-
 			buffer_ptr[col] = (back & mask) | (fore & ~mask);
 		}
 
@@ -380,12 +455,26 @@ void Game::copy_to_buffer_clip_masked(uint32** ibuf, const uint32 index, const i
 	uint32 * __restrict buffer_ptr = buffer->bits + stride * (y + clip_top) + x + clip_left;
 	uint32 * __restrict sprite_ptr = sprite + sprite_width * clip_top + clip_left + 1;
 
+	const __m128i zero     = _mm_setzero_si128();
+	const __m128i rgb_mask = _mm_set1_epi32(0x00ffffff);
+
+	const uint32 simd_width = clipped_width & ~3u;
+
 	for (uint32 row = 0; row < clipped_height; ++row) {
-		for (uint32 col = 0; col < clipped_width; ++col) {
+		uint32 col = 0;
+		for (; col < simd_width; col += 4) {
+			const __m128i fore = _mm_loadu_si128((const __m128i*)(sprite_ptr + col));
+			const __m128i back = _mm_loadu_si128((const __m128i*)(buffer_ptr + col));
+			const __m128i mask = _mm_cmpeq_epi32(_mm_and_si128(fore, rgb_mask), zero);
+
+			_mm_storeu_si128((__m128i*)(buffer_ptr + col),
+				_mm_or_si128(_mm_and_si128(back, mask), _mm_andnot_si128(mask, fore))
+			);
+		}
+		for (; col < clipped_width; ++col) {
 			const uint32 fore = sprite_ptr[col];
 			const uint32 back = buffer_ptr[col];
 			const uint32 mask = -!(fore & 0x00ffffff);
-
 			buffer_ptr[col] = (back & mask) | (fore & ~mask);
 		}
 
@@ -400,8 +489,9 @@ void Game::update(const float delta) {
 	const float unit = delta * 100.0f;
 
 	update_input(unit);
-
 	update_anims();
+	update_camera(delta);
+	update_dirty();
 }
 
 bool Game::is_pressed(const uint8 scancode, const bool turnoff) {
@@ -444,45 +534,37 @@ void Game::update_input(const float unit) {
 			update_speed(vel_y, down,  up);
 			update_speed(vel_x, right, left);
 
-			const float scaled_unit = unit * 0.1333333333333333f; // 2/15th
-			const float y_amount = scaled_unit * vel_y;
-			const float x_amount = scaled_unit * vel_x;
+			const float scaled_unit = unit / (float)MAXSPEED * 1.5f;
+			float next_sub_x = sub_x + scaled_unit * vel_x;
+			float next_sub_y = sub_y + scaled_unit * vel_y;
 
-			int8 next_sub_y = ceil<int8, float>(sub_y - y_amount);
-			int8 next_sub_x = ceil<int8, float>(sub_x - x_amount);
+			// pos_y = feet tile, sprite is 2 tiles tall (head at pos_y - 1)
+			const bool hit_bounds_top    =        0 == pos_y && next_sub_y < 0;
+			const bool hit_bounds_bottom = maph - 2 == pos_y && next_sub_y >= (float)(TILE_Y - 1);
+			const bool hit_bounds_left   =        0 == pos_x && next_sub_x < 0;
+			const bool hit_bounds_right  = mapw - 2 == pos_x && next_sub_x >= (float)(TILE_X - 1);
 
-			const bool hit_bounds_top    =        1 == pos_y && next_sub_y >= TILE_Y - 1;
-			const bool hit_bounds_bottom = maph - 1 == pos_y && next_sub_y <= 0;
-			const bool hit_bounds_left   =        1 == pos_x && next_sub_x >= TILE_X - 1;
-			const bool hit_bounds_right  = mapw - 1 == pos_x && next_sub_x <= 0;
+			// quantize to integer subpos
+			if (vel_x > 0) { next_sub_x = (float)ceil <int8, float>(next_sub_x); }
+			else           { next_sub_x = (float)floor<int8, float>(next_sub_x); }
+			if (vel_y > 0) { next_sub_y = (float)ceil <int8, float>(next_sub_y); }
+			else           { next_sub_y = (float)floor<int8, float>(next_sub_y); }
 
 			if (hit_bounds_top  || hit_bounds_bottom) { next_sub_y = sub_y; vel_y = 0; }
 			if (hit_bounds_left || hit_bounds_right)  { next_sub_x = sub_x; vel_x = 0; }
 
-			if(sub_y != next_sub_y || sub_x != next_sub_x) {
-				if(sub_y != next_sub_y) {
-						 if (next_sub_y >= TILE_Y) { --pos_y; sub_y = next_sub_y - TILE_Y; }
-					else if (next_sub_y < 0)       { ++pos_y; sub_y = next_sub_y + TILE_Y; }
-					else                           {          sub_y = next_sub_y;          }
-				}
-
-				if(sub_x != next_sub_x) {
-						 if (next_sub_x >= TILE_X) { --pos_x; sub_x = next_sub_x - TILE_X; }
-					else if (next_sub_x < 0)       { ++pos_x; sub_x = next_sub_x + TILE_X; }
-					else                           {          sub_x = next_sub_x;          }
-				}
+			if(sub_y != next_sub_y) {
+			         if (next_sub_y >= TILE_Y) { ++pos_y; sub_y = next_sub_y - TILE_Y; }
+				else if (next_sub_y < 0)       { --pos_y; sub_y = next_sub_y + TILE_Y; }
+				else                           {          sub_y = next_sub_y;          }
 			}
 
-			// TODO: Clean this up, it is artefacty and the velocity is wrong in the down and right direction
-			flag_dirt(pos_x, pos_y);
-			flag_dirt(pos_x + 1, pos_y);
-			flag_dirt(pos_x - 1, pos_y);
-			flag_dirt(pos_x, pos_y - 1);
-			flag_dirt(pos_x + 1, pos_y - 1);
-			flag_dirt(pos_x - 1, pos_y - 1);
-			flag_dirt(pos_x, pos_y + 1);
-			flag_dirt(pos_x + 1, pos_y + 1);
-			flag_dirt(pos_x - 1, pos_y + 1);
+			if(sub_x != next_sub_x) {
+			         if (next_sub_x >= TILE_X) { ++pos_x; sub_x = next_sub_x - TILE_X; }
+				else if (next_sub_x < 0)       { --pos_x; sub_x = next_sub_x + TILE_X; }
+				else                           {          sub_x = next_sub_x;          }
+			}
+
 
 			entity_set_position(entities.positions [player_index], chunk_x, chunk_y, pos_x, pos_y, sub_x, sub_y);
 			entity_set_velocity(entities.velocities[player_index], vel_x, vel_y);
@@ -497,16 +579,77 @@ void Game::update_input(const float unit) {
 	if (is_pressed(K_SPACE, true)) {
 		paused = !paused;
 	}
+
+	if (is_pressed(K_C, true)) {
+		if (!camera.locked_to_entity) {
+			camera.locked_to_entity = true;
+			camera.locked_to_entity_id = player_id;
+
+			// compute current and target pixel positions for lerp
+			// pixel pos = position * TILE + subpos
+			const float cur_px = (float)camera.position_x * TILE_X + (float)camera.subpos_x;
+			const float cur_py = (float)camera.position_y * TILE_Y + (float)camera.subpos_y;
+
+			Camera target = {};
+			entities.lock_camera(player_id, target);
+			const float tgt_px = (float)((int32)target.position_x - mid_tiles_x) * TILE_X + (float)target.subpos_x;
+			const float tgt_py = (float)((int32)target.position_y - mid_tiles_y) * TILE_Y + (float)target.subpos_y;
+
+			camera.tween_x.begin((float)cur_px, (float)tgt_px, 1.0f, EASE_OUT);
+			camera.tween_y.begin((float)cur_py, (float)tgt_py, 1.0f, EASE_OUT);
+		} else {
+			camera.locked_to_entity = false;
+		}
+	}
+}
+
+void Game::update_camera(const float delta) {
+	if (!camera.locked_to_entity) { return; }
+
+	// compute target in pixel space: pixel pos = position * TILE + subpos
+	Camera target = {};
+	entities.lock_camera(camera.locked_to_entity_id, target);
+	const float target_px = (float)((int32)target.position_x - mid_tiles_x) * TILE_X + (float)target.subpos_x;
+	const float target_py = (float)((int32)target.position_y - mid_tiles_y) * TILE_Y + (float)target.subpos_y;
+
+	if (camera.tween_x.active || camera.tween_y.active) {
+		camera.tween_x.end = target_px;
+		camera.tween_y.end = target_py;
+
+		camera.tween_x.update(delta);
+		camera.tween_y.update(delta);
+
+		const float px = camera.tween_x.value();
+		const float py = camera.tween_y.value();
+
+		// decompose: position = floor(px / TILE), subpos = remainder
+		int32 tile_x = (int32)floorf(px / TILE_X);
+		int32 tile_y = (int32)floorf(py / TILE_Y);
+		int32 sub_x  = (int32)(px - tile_x * TILE_X);
+		int32 sub_y  = (int32)(py - tile_y * TILE_Y);
+
+		camera.position_x = (int16)tile_x;
+		camera.position_y = (int16)tile_y;
+		camera.subpos_x   = (uint8)sub_x;
+		camera.subpos_y   = (uint8)sub_y;
+	} else {
+		// tween complete or not active — snap to entity
+		camera.position_x = (int16)target.position_x - mid_tiles_x;
+		camera.position_y = (int16)target.position_y - mid_tiles_y;
+		camera.subpos_x   = target.subpos_x;
+		camera.subpos_y   = target.subpos_y;
+	}
+
+	update_bounds();
 }
 
 void Game::update_bounds() {
-	      int16 minx = camera.position_x;
-	      int16 miny = camera.position_y;
-	const int16 maxx = minx + max_tiles_x - 1;
-	const int16 maxy = miny + max_tiles_y - 1;
-
-	minx -= 0 != camera.subpos_x;
-	miny -= 0 != camera.subpos_y;
+	const int16 minx = camera.position_x;
+	const int16 miny = camera.position_y;
+	// with natural subpos convention, posx IS the leading edge tile
+	// trailing edge is posx + max_tiles_x when subpos > 0, or posx + max_tiles_x - 1 when aligned
+	const int16 maxx = minx + max_tiles_x - 1 + (0 != camera.subpos_x);
+	const int16 maxy = miny + max_tiles_y - 1 + (0 != camera.subpos_y);
 
 	bounds.min.x = minx;
 	bounds.min.y = miny;
@@ -521,41 +664,76 @@ void Game::update_anims() {
 
 		if (!inter.update()) { continue; }
 
-		uint32 *tile = tindices[ta.tile_index];
-		uint32  info = *tile;
+		// advance frame in separate state array (tile header stays immutable)
+		const uint32 info   = *tindices[ta.tile_index];
+		const uint8  frames = (uint8)((info & TILE_MASK_FRAMES) >> TILE_POS_FRAMES);
+		uint8 frame = tile_frames[ta.tile_index];
+		if (++frame >= frames) { frame = 0; }
+		tile_frames[ta.tile_index] = frame;
 
-		const uint32 frames = (info & TILE_MASK_FRAMES) >> TILE_POS_FRAMES;
-		      uint32 index  = (info & TILE_MASK_INDEX)  >> TILE_POS_INDEX;
-		if (++index >= frames) { index -= frames; }
+		// dirty only the precomputed cells that use this tile type
+		const uint16 start = anim_cell_start[ta.tile_index];
+		const uint16 count = anim_cell_count[ta.tile_index];
 
-		info = (info & ~TILE_MASK_INDEX) | (index << TILE_POS_INDEX);
-
-		*tile = info;
-
-		uint32 mapval;
-		uint32 tindex, oindex;
-
-		const uint32 ys = MAX(bounds.min.y, 0);
-		const uint32 xs = MAX(bounds.min.x, 0);
-		const uint32 ye = MIN(bounds.max.y, maph);
-		const uint32 xe = MIN(bounds.max.x, mapw);
-
-		uint32 total_tiles = (ye - ys + 1) * (xe - xs + 1);
-		uint32 total_dirt  = 0;
-		for (uint32 y = ys; y <= ye; ++y) {
-			uint32 moff = y * mapw;
-			for (uint32 x = xs; x <= xe; ++x) {
-				mapval = map[moff + x];
-				tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
-				oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
-				
-				if (tindex == ta.tile_index  || oindex == ta.tile_index) {
-					flag_dirt((uint16)x, (uint16)y);
-					++total_dirt;
-				}
-			}
+		for (uint16 c = 0; c < count; ++c) {
+			const uint16 cell = anim_cells[start + c];
+			flag_dirt(cell % mapw, cell / mapw);
 		}
-		//if (total_tiles == total_dirt) { refresh = true; }
+	}
+}
+
+void Game::update_dirty() {
+	if (refresh) { return; } // full refresh handles everything
+
+	// if camera moved, flag full refresh � every tile shifted
+	static int16 prev_cam_x = camera.position_x;
+	static int16 prev_cam_y = camera.position_y;
+	static int16 prev_sub_x = camera.subpos_x;
+	static int16 prev_sub_y = camera.subpos_y;
+
+	if (prev_cam_x != camera.position_x || prev_cam_y != camera.position_y ||
+		prev_sub_x != camera.subpos_x || prev_sub_y != camera.subpos_y) {
+		refresh = true;
+		prev_cam_x = camera.position_x;
+		prev_cam_y = camera.position_y;
+		prev_sub_x = camera.subpos_x;
+		prev_sub_y = camera.subpos_y;
+		return;  // full refresh handles everything
+	}
+
+	// flag tiles at current and previous position for each entity that is moving
+	for (uint8 i = 0; i < entities.active; ++i) {
+		const uint8 vel = entities.velocities[i];
+		const int8 vx = entity_get_velocity_x(vel);
+		const int8 vy = entity_get_velocity_y(vel);
+		if (0 == vx && 0 == vy) { continue; }
+
+		const uint32 size = entities.sizes[i];
+		const uint8 size_w = entity_get_size_width (size);
+		const uint8 size_h = entity_get_size_height(size);
+		
+		const uint32 position = entities.positions[i];
+		const int16 cur_x = entity_get_position_x(position);
+		const int16 cur_y = entity_get_position_y(position);
+		const int16 sub_x = entity_get_subpos_x(position);
+		const int16 sub_y = entity_get_subpos_y(position);
+
+		// derive previous tile position: if subpos crossed a tile boundary
+		// this frame, the previous tile was one back in the velocity direction
+		const int16 prv_x = (vx > 0 && sub_x < vx) ? cur_x - 1 : (vx < 0 && sub_x > (int16)TILE_X + vx) ? cur_x + 1 : cur_x;
+		const int16 prv_y = (vy > 0 && sub_y < vy) ? cur_y - 1 : (vy < 0 && sub_y > (int16)TILE_Y + vy) ? cur_y + 1 : cur_y;
+
+		// flag current position
+		for (int y = -(int)size_h; y <= 1; ++y)
+			for (int x = -1; x <= (int)size_w; ++x)
+				flag_dirt((int16)(cur_x + x), (int16)(cur_y + y));
+
+		// flag previous position if tile changed
+		if (prv_x != cur_x || prv_y != cur_y) {
+			for (int y = -(int)size_h; y <= 1; ++y)
+				for (int x = -1; x <= (int)size_w; ++x)
+					flag_dirt((int16)(prv_x + x), (int16)(prv_y + y));
+		}
 	}
 }
 
@@ -598,27 +776,25 @@ const void Game::render_map_all() {
 	int32 mapposy2 = posy + max_tiles_y;
 
 	if (camera.subpos_x) {
-		const int32 x = camera.subpos_x - TILE_X;
-		xpos1 = x;
-		xpos2 = x + max_px_x;
-		l = -x;
-		r = camera.subpos_x;
+		xpos1 = -camera.subpos_x;
+		xpos2 = max_px_x - camera.subpos_x;
+		l = camera.subpos_x;
+		r = TILE_X - camera.subpos_x;
 
-		--xe;
-		--mapposx1;
-		--mapposx2;
+		++xs;
+		// mapposx1 stays as posx — it IS the leading edge tile
+		// mapposx2 stays as posx + max_tiles_x — it IS the trailing edge tile
+		// xe stays at max_tiles_x — main loop runs xs..xe-1 = 1..max_tiles_x-1
 	}
 
 	if (camera.subpos_y) {
-		const int32 y = camera.subpos_y - TILE_Y;
-		ypos1 = y;
-		ypos2 = y + max_px_y;
-		t = -y;
-		b = camera.subpos_y;
+		ypos1 = -camera.subpos_y;
+		ypos2 = max_px_y - camera.subpos_y;
+		t = camera.subpos_y;
+		b = TILE_Y - camera.subpos_y;
 
-		--ye;
-		--mapposy1;
-		--mapposy2;
+		++ys;
+		// same reasoning for Y
 	}
 
 	const bool mapx1_inbounds = mapposx1 >= 0 && mapposx1 < (int)mapw;
@@ -652,7 +828,7 @@ const void Game::render_map_all() {
 					moff = (y + posy) * mapw;
 					mapval = map[moff + mapposx1];
 
-					ypos = (y * TILE_Y) + camera.subpos_y;
+					ypos = y * TILE_Y - camera.subpos_y;
 
 					tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 					oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
@@ -668,7 +844,7 @@ const void Game::render_map_all() {
 					moff = (y + posy) * mapw;
 					mapval = map[moff + mapposx2];
 
-					ypos = (y * TILE_Y) + camera.subpos_y;
+					ypos = y * TILE_Y - camera.subpos_y;
 
 					tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 					oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
@@ -688,7 +864,7 @@ const void Game::render_map_all() {
 					mapposx = x + posx;
 					mapval = map[moff1 + mapposx];
 
-					xpos = (x * TILE_X) + camera.subpos_x;
+					xpos = x * TILE_X - camera.subpos_x;
 
 					tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 					oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
@@ -705,7 +881,7 @@ const void Game::render_map_all() {
 					mapposx = x + posx;
 					mapval = map[moff2 + mapposx];
 
-					xpos = (x * TILE_X) + camera.subpos_x;
+					xpos = x * TILE_X - camera.subpos_x;
 
 					tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
 					oindex = (mapval & MAP_MASK_FORE) >> MAP_POS_FORE;
@@ -772,11 +948,11 @@ const void Game::render_map_all() {
 
 	// main area
 	for (int32 y = ys; y < ye; ++y) {
-		ypos = (y * TILE_Y) + camera.subpos_y;
+		ypos = (y * TILE_Y) - camera.subpos_y;
 		moff = (y + posy) * mapw;
 
 		for (int32 x = xs; x < xe; ++x) {
-			xpos = (x * TILE_X) + camera.subpos_x;
+			xpos = x * TILE_X - camera.subpos_x;
 			mapval = map[moff + x + posx];
 
 			tindex = (mapval & MAP_MASK_BACK) >> MAP_POS_BACK;
@@ -799,22 +975,22 @@ const void Game::render_map_dirty() {
 	const int16 maxx = bounds.max.x;
 	const int16 maxy = bounds.max.y;
 
-	const int8 intx = camera.subpos_x;
-	const int8 inty = camera.subpos_y;
+	const uint8 intx = camera.subpos_x;
+	const uint8 inty = camera.subpos_y;
 
 	uint32 interp_top, interp_bottom, interp_left, interp_right;
 
 	if (intx) {
-		interp_left  = -intx + TILE_X;
-		interp_right =  intx;
+		interp_left  = intx;
+		interp_right = TILE_X - intx;
 	} else {
 		interp_left  = 0;
 		interp_right = 0;
 	}
 
 	if (inty) {
-		interp_top    = -inty + TILE_Y;
-		interp_bottom =  inty;
+		interp_top    = inty;
+		interp_bottom = TILE_Y - inty;
 	} else {
 		interp_top    = 0;
 		interp_bottom = 0;
@@ -834,14 +1010,16 @@ const void Game::render_map_dirty() {
 		const bool on_top    = dy < miny || (dy == miny && 0 != inty);
 		const bool on_bottom = dy > maxy || (dy == maxy && 0 != inty);
 
-		const int32 xpos = (dx - posx) * TILE_X + intx;
-		const int32 ypos = (dy - posy) * TILE_Y + inty;
+		const int32 xpos = (dx - posx) * TILE_X - intx;
+		const int32 ypos = (dy - posy) * TILE_Y - inty;
+
+		expand_dirty_px_bounds(xpos, ypos, TILE_X, TILE_Y);
 
 		if (on_top || on_bottom || on_right || on_left) {
-			const uint32 clip_top    = !on_bottom * interp_top;
-			const uint32 clip_bottom = !on_top    * interp_bottom;
-			const uint32 clip_left   = !on_right  * interp_left;
-			const uint32 clip_right  = !on_left   * interp_right;
+			const uint32 clip_top    = on_top    * interp_top;
+			const uint32 clip_bottom = on_bottom * interp_bottom;
+			const uint32 clip_left   = on_left   * interp_left;
+			const uint32 clip_right  = on_right  * interp_right;
 
 			if (oindex) {
 				copy_to_buffer_clip_masked(tindex, oindex, xpos, ypos, clip_top, clip_left, clip_bottom, clip_right);
@@ -865,37 +1043,136 @@ const bool Game::render() {
 }
 
 const bool Game::render_entities() {
-	const int8 camera_pos_x = camera.position_x;
+	bool rendered = false;
 
 	for(int i = 0; i < entities.active; ++i) {
+		// skip if entity hasn't moved and no dirty tiles underneath
+		const uint8 vel = entities.velocities[i];
+		if (0 == vel && !refresh && dirty_len == 0) { continue; }
+
 		const uint32 position = entities.positions[i];
-		const uint16 position_x   = entity_get_position_x(position) - camera.position_x;
-		const uint16 position_y   = entity_get_position_y(position) - camera.position_y;
+		const int16 position_x = (int16)(entity_get_position_x(position) - camera.position_x);
+		const int16 position_y = (int16)(entity_get_position_y(position) - camera.position_y);
 
+		// coarse tile-level cull (camera-relative coordinates)
 		if (
-			   (int16)position_x < bounds.min.x
-			|| (int16)position_x > bounds.max.x
-			|| (int16)position_y < bounds.min.y
-			|| (int16)position_y > bounds.max.y
+			   position_x < -1
+			|| position_x > max_tiles_x
+			|| position_y < -1
+			|| position_y > max_tiles_y
 		) { continue; }
-
-		const uint16 screen_x = position_x * TILE_X - entity_get_subpos_x(position) + camera.subpos_x;
-		const uint16 screen_y = position_y * TILE_Y - entity_get_subpos_y(position) + camera.subpos_y;
 
 		const uint32 sprite = entities.sprites[i];
 		const uint8  sprite_index = entity_get_sprite_index(sprite);
 
-		copy_to_buffer_masked(cindices, sprite_index, screen_x, screen_y);
+		const uint32 sprite_header = *cindices[sprite_index];
+		const uint32 sprite_w = (sprite_header & TILE_MASK_WIDTH)  >> TILE_POS_WIDTH;
+		const uint32 sprite_h = (sprite_header & TILE_MASK_HEIGHT) >> TILE_POS_HEIGHT;
+
+		// pos_y is feet — draw sprite from head (offset up by sprite height minus one tile)
+		const int16 screen_x = (int16)(position_x * TILE_X + entity_get_subpos_x(position) - camera.subpos_x);
+		const int16 screen_y = (int16)(position_y * TILE_Y + entity_get_subpos_y(position) - camera.subpos_y - (int16)(sprite_h - TILE_Y));
+
+		// fine pixel-level cull
+		if (screen_x + (int16)sprite_w <= 0 || screen_x >= (int16)_w ||
+		    screen_y + (int16)sprite_h <= 0 || screen_y >= (int16)_h) {
+			continue;
+		}
+
+		expand_dirty_px_bounds(screen_x, screen_y, sprite_w, sprite_h);
+
+		// clear off-map pixels in the entity's vicinity to prevent smearing
+		// (dirty tile rendering only covers in-map tiles; off-map black area
+		// is only cleared during full refresh, so moving entities leave trails)
+		if (vel) {
+			const int32 map_screen_top  = (int32)(-camera.position_y) * TILE_Y - camera.subpos_y;
+			const int32 map_screen_left = (int32)(-camera.position_x) * TILE_X - camera.subpos_x;
+			const int32 map_screen_bottom = (int32)((int32)maph - camera.position_y) * TILE_Y - camera.subpos_y;
+			const int32 map_screen_right  = (int32)((int32)mapw - camera.position_x) * TILE_X - camera.subpos_x;
+
+			// expanded rect covers previous frame's position too
+			const int32 margin = 8;
+			const int32 ex0 = max((int32)screen_x - margin, (int32)0);
+			const int32 ey0 = max((int32)screen_y - margin, (int32)0);
+			const int32 ex1 = min((int32)screen_x + (int32)sprite_w + margin, (int32)_w);
+			const int32 ey1 = min((int32)screen_y + (int32)sprite_h + margin, (int32)_h);
+
+			// above map
+			if (ey0 < map_screen_top && map_screen_top > 0) {
+				const int32 cy1 = min(ey1, map_screen_top);
+				for (int32 row = ey0; row < cy1; ++row)
+					memset(&buffer->bits[row * stride + ex0], 0, (ex1 - ex0) * sizeof(uint32));
+				expand_dirty_px_bounds(ex0, ey0, ex1 - ex0, cy1 - ey0);
+			}
+
+			// left of map
+			if (ex0 < map_screen_left && map_screen_left > 0) {
+				const int32 cx1 = min(ex1, map_screen_left);
+				const int32 cy0 = max(ey0, max(map_screen_top, (int32)0));
+				for (int32 row = cy0; row < ey1; ++row)
+					memset(&buffer->bits[row * stride + ex0], 0, (cx1 - ex0) * sizeof(uint32));
+				expand_dirty_px_bounds(ex0, cy0, cx1 - ex0, ey1 - cy0);
+			}
+
+			// below map
+			if (ey1 > map_screen_bottom && map_screen_bottom < (int32)_h) {
+				const int32 cy0 = max(ey0, map_screen_bottom);
+				for (int32 row = cy0; row < ey1; ++row)
+					memset(&buffer->bits[row * stride + ex0], 0, (ex1 - ex0) * sizeof(uint32));
+				expand_dirty_px_bounds(ex0, cy0, ex1 - ex0, ey1 - cy0);
+			}
+
+			// right of map
+			if (ex1 > map_screen_right && map_screen_right < (int32)_w) {
+				const int32 cx0 = max(ex0, map_screen_right);
+				const int32 cy0 = max(ey0, max(map_screen_top, (int32)0));
+				const int32 cy1 = min(ey1, min(map_screen_bottom, (int32)_h));
+				for (int32 row = cy0; row < cy1; ++row)
+					memset(&buffer->bits[row * stride + cx0], 0, (ex1 - cx0) * sizeof(uint32));
+				expand_dirty_px_bounds(cx0, cy0, ex1 - cx0, cy1 - cy0);
+			}
+		}
+
+		const uint32 clip_top    = (screen_y < 0)                           ? (uint32)(-screen_y)      : 0;
+		const uint32 clip_left   = (screen_x < 0)                           ? (uint32)(-screen_x)      : 0;
+		const uint32 clip_bottom = (screen_y + (int16)sprite_h > (int16)_h) ? screen_y + sprite_h - _h : 0;
+		const uint32 clip_right  = (screen_x + (int16)sprite_w > (int16)_w) ? screen_x + sprite_w - _w : 0;
+
+		if (clip_top || clip_left || clip_bottom || clip_right) {
+			copy_to_buffer_clip_masked(cindices, sprite_index, screen_x, screen_y, clip_top, clip_left, clip_bottom, clip_right);
+		} else {
+			copy_to_buffer_masked(cindices, sprite_index, screen_x, screen_y);
+		}
+
+		rendered = true;
 	}
 
-	return false;
+	return rendered;
 }
 
 const bool Game::render_map() {
+	reset_dirty_px_bounds();
+
+	++current_frame_id;
+	if (0 == current_frame_id) {
+		memset(dirty_frame_id, 0, sizeof(dirty_frame_id) * mapw * maph);
+	}
+
 	if (refresh) {
+		// clear buffer to black when viewport extends beyond map edges
+		const int16 view_right  = camera.position_x + max_tiles_x + (0 != camera.subpos_x);
+		const int16 view_bottom = camera.position_y + max_tiles_y + (0 != camera.subpos_y);
+		if (camera.position_x < 0 ||
+			camera.position_y < 0 ||
+			view_right  > (int16)mapw ||
+			view_bottom > (int16)maph) {
+			memset(buffer->bits, 0, stride * _h * sizeof(uint32));
+		}
+
 		render_map_all();
 		refresh = false;
 		dirty_len = 0;
+		expand_dirty_px_bounds(0, 0, _w, _h);
 
 		return true;
 	} else if (dirty_len) {
@@ -903,11 +1180,6 @@ const bool Game::render_map() {
 		dirty_len = 0;
 
 		return true;
-	}
-
-	++current_frame_id;
-	if (0 == current_frame_id) {
-		memset(dirty_frame_id, 0, mapw * maph);
 	}
 
 	return false;
@@ -934,21 +1206,45 @@ bool Game::resize(const int w, const int h) {
 	return true;
 }
 
-void Game::flag_dirt(const uint16 x, const uint16 y) {
-	if (
-		   (int16)x < bounds.min.x
-		|| (int16)x > bounds.max.x
-		|| (int16)y < bounds.min.y
-		|| (int16)y > bounds.max.y
-	) { return; }
+void Game::reset_dirty_px_bounds() {
+	dirty_px_bounds.min.x = 0x7FFFFFFF;
+	dirty_px_bounds.min.y = 0x7FFFFFFF;
+	dirty_px_bounds.max.x = (int32)0x80000000;
+	dirty_px_bounds.max.y = (int32)0x80000000;
+}
 
-	const uint32 moff = y * mapw;
-	const uint32 index = moff + x;
+void Game::expand_dirty_px_bounds(int32 x, int32 y, int32 w, int32 h) {
+	if (x < dirty_px_bounds.min.x) { dirty_px_bounds.min.x = x; }
+	if (y < dirty_px_bounds.min.y) { dirty_px_bounds.min.y = y; }
+
+	const int32 x2 = x + w;
+	const int32 y2 = y + h;
+
+	if (x2 > dirty_px_bounds.max.x) { dirty_px_bounds.max.x = x2; }
+	if (y2 > dirty_px_bounds.max.y) { dirty_px_bounds.max.y = y2; }
+
+	// clamp to buffer
+	if (dirty_px_bounds.min.x < 0)           { dirty_px_bounds.min.x = 0;  }
+	if (dirty_px_bounds.min.y < 0)           { dirty_px_bounds.min.y = 0;  }
+	if (dirty_px_bounds.max.x > (int32)(_w)) { dirty_px_bounds.max.x = _w; }
+	if (dirty_px_bounds.max.y > (int32)(_h)) { dirty_px_bounds.max.y = _h; }
+}
+
+void Game::flag_dirt(const int16 x, const int16 y) {
+	// clamp to map bounds — off-map coordinates snap to the nearest edge tile
+	const uint16 cx = (uint16)(x < 0 ? 0 : x >= (int16)mapw ? mapw - 1 : x);
+	const uint16 cy = (uint16)(y < 0 ? 0 : y >= (int16)maph ? maph - 1 : y);
+
+	// cull tiles outside visible bounds
+	if (cx < bounds.min.x || cx > bounds.max.x ||
+	    cy < bounds.min.y || cy > bounds.max.y) { return; }
+
+	const uint32 index = cy * mapw + cx;
 
 	if (dirty_frame_id[index] == current_frame_id) { return; }
 
 	dirty_frame_id[index] = current_frame_id;
-	dirty_tiles[dirty_len] = { map[index], { x, y } };
+	dirty_tiles[dirty_len] = { map[index], { cx, cy } };
 
 	++dirty_len;
 }
@@ -982,6 +1278,11 @@ void Game::unload() {
 	if (NULL != dirty_tiles) {
 		delete[] dirty_tiles;
 		dirty_tiles = NULL;
+	}
+
+	if (NULL != anim_cells) {
+		free(anim_cells);
+		anim_cells = NULL;
 	}
 
 	key_press = NULL;

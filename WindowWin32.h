@@ -50,6 +50,7 @@
 class WindowWin32 {
 public:
 	static WindowWin32* self;
+	static const uint32 MAX_WORKERS = 8;
 
 	HWND      window;
 	HINSTANCE instance;
@@ -72,6 +73,17 @@ public:
 
 	bool init(const uint32 width, const uint32 height);
 	void unload();
+
+	// thread primitives — OS-specific wrappers
+	void* thread_create(void (*func)(void*), void *param, uint32 index);
+	void* event_create(bool manual_reset, bool initial_state);
+	void  event_signal(void *event);
+	void  event_reset(void *event);
+	void  event_wait(void *event);
+	bool  event_try_wait(void *event);  // non-blocking: returns true if signaled
+	void  event_wait_all(void **events, uint32 count);
+	void  handle_close(void *handle);
+	bool  set_thread_affinity(void *thread_handle, uint32 core_index);
 
 	void  close();
 	void  show_window();

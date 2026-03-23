@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "WindowWin32.h"
-#include <thread>
 
 WindowWin32* WindowWin32::self = NULL;
 double WindowWin32::query_perf_freq = 0;
@@ -183,17 +182,12 @@ LRESULT CALLBACK WindowWin32::_proc(HWND window, uint msg, WPARAM wparam, LPARAM
 
 			break;
 		}
-		// This is a hack. The MOVE / SIZE message triggers its own loop
-		// and doesn't return back to the main Peek loop until it is done.
-		// This causes the entire game to halt until the window is finished
-		// dragging / resizing. To get around this, We set a timer that
-		// runs every 100ms. This triggers a 2nd game loop to run in a new
-		// thread for the duration of 100ms or until the event ends.
+		// The modal MOVE/SIZE loop blocks the main Peek loop.
+		// A 16ms timer keeps the game ticking on the main thread.
 		case WM_ENTERSIZEMOVE: {
-			// execute the callback immediately, otherwise there will be a 100ms delay.
 			sizemove();
 
-			SetTimer(window, NULL, 100u, NULL);
+			SetTimer(window, NULL, 16u, NULL);
 			resize_move = true;
 			break;
 		}
@@ -257,8 +251,7 @@ void WindowWin32::close() {
 }
 
 void WindowWin32::sizemove() {
-	std::thread t(sizemove_callback);
-	t.detach();
+	sizemove_callback();
 }
 
 bool WindowWin32::update() {
@@ -473,4 +466,58 @@ uint8 WindowWin32::map_key(const WPARAM wparam) {
 	}
 
 	return 0;
+}
+
+// ── thread primitives ───────────────────────────────────────────────────────
+
+struct Win32ThreadWrapper {
+	void (*func)(void*);
+	void *param;
+};
+
+static DWORD WINAPI win32_thread_entry(LPVOID lparam) {
+	Win32ThreadWrapper *w = (Win32ThreadWrapper*)lparam;
+	w->func(w->param);
+	return 0;
+}
+
+// persistent wrappers — one per possible thread (leaked intentionally, lives for app lifetime)
+static Win32ThreadWrapper thread_wrappers[WindowWin32::MAX_WORKERS];
+
+void* WindowWin32::thread_create(void (*func)(void*), void *param, uint32 index) {
+	thread_wrappers[index] = { func, param };
+	return (void*)CreateThread(NULL, 0, win32_thread_entry, &thread_wrappers[index], 0, NULL);
+}
+
+void* WindowWin32::event_create(bool manual_reset, bool initial_state) {
+	return (void*)CreateEventW(NULL, manual_reset ? TRUE : FALSE, initial_state ? TRUE : FALSE, NULL);
+}
+
+void WindowWin32::event_signal(void *event) {
+	SetEvent((HANDLE)event);
+}
+
+void WindowWin32::event_reset(void *event) {
+	ResetEvent((HANDLE)event);
+}
+
+void WindowWin32::event_wait(void *event) {
+	WaitForSingleObject((HANDLE)event, INFINITE);
+}
+
+bool WindowWin32::event_try_wait(void *event) {
+	return WaitForSingleObject((HANDLE)event, 0) == WAIT_OBJECT_0;
+}
+
+void WindowWin32::event_wait_all(void **events, uint32 count) {
+	WaitForMultipleObjects(count, (const HANDLE*)events, TRUE, INFINITE);
+}
+
+void WindowWin32::handle_close(void *handle) {
+	CloseHandle((HANDLE)handle);
+}
+
+bool WindowWin32::set_thread_affinity(void *thread_handle, uint32 core_index) {
+	DWORD_PTR mask = (DWORD_PTR)1 << core_index;
+	return SetThreadAffinityMask((HANDLE)thread_handle, mask) != 0;
 }
